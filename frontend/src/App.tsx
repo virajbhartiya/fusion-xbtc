@@ -117,6 +117,12 @@ export default function App() {
   const [orderMatching, setOrderMatching] = useState(false);
   const [orderSelecting, setOrderSelecting] = useState(false);
   const [matchTxHash, setMatchTxHash] = useState<string>('');
+  
+  // UTXO display state
+  const [utxoData, setUtxoData] = useState<any[]>([]);
+  const [utxoLoading, setUtxoLoading] = useState<boolean>(false);
+  const [utxoError, setUtxoError] = useState<string>('');
+  const [showUtxoDetails, setShowUtxoDetails] = useState<boolean>(false);
 
   useEffect(() => { ensureBuffer(); }, []);
 
@@ -194,6 +200,48 @@ export default function App() {
     const interval = setInterval(fetchExchangeRate, 30000);
     return () => clearInterval(interval);
   }, []);
+
+  // Fetch UTXO data for an address
+  async function fetchUtxoData(address: string) {
+    if (!address) return;
+    
+    setUtxoLoading(true);
+    setUtxoError('');
+    
+    try {
+      // Use mempool.space API to fetch UTXOs
+      const network = 'testnet'; // Default to testnet for demo
+      const apiUrl = `https://mempool.space/testnet/api/address/${address}/utxo`;
+      
+      const response = await fetch(apiUrl);
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch UTXOs: ${response.status}`);
+      }
+      
+      const utxos = await response.json();
+      
+      // Format UTXO data for display
+      const formattedUtxos = utxos.map((utxo: any) => ({
+        txid: utxo.txid,
+        vout: utxo.vout,
+        value: utxo.value / 100000000, // Convert satoshis to BTC
+        status: utxo.status,
+        blockHeight: utxo.status.block_height,
+        confirmed: utxo.status.confirmed,
+        explorerUrl: getBitcoinExplorerUrl(utxo.txid, network)
+      }));
+      
+      setUtxoData(formattedUtxos);
+      setShowUtxoDetails(true);
+      
+    } catch (error) {
+      console.error('Error fetching UTXO data:', error);
+      setUtxoError('Failed to fetch UTXO data. Please check the address and try again.');
+    } finally {
+      setUtxoLoading(false);
+    }
+  }
 
 
   // Calculate BTC amount when ETH amount changes
@@ -996,7 +1044,18 @@ export default function App() {
                 <label className="form-label">{chain.toUpperCase()} wallet</label>
                 {utxoAddress ? (
                   <div className="message success">
-                    Connected: <code className="bg-white px-2 py-1 rounded text-sm">{utxoAddress}</code> <span className="opacity-70">[{utxoWallet}]</span>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        Connected: <code className="bg-white px-2 py-1 rounded text-sm">{utxoAddress}</code> <span className="opacity-70">[{utxoWallet}]</span>
+                      </div>
+                      <button 
+                        onClick={() => fetchUtxoData(utxoAddress)}
+                        disabled={utxoLoading}
+                        className="btn btn-secondary text-xs px-3 py-1"
+                      >
+                        {utxoLoading ? 'Loading...' : 'View UTXOs'}
+                      </button>
+                    </div>
                   </div>
                 ) : (
                   <button 
@@ -1019,6 +1078,67 @@ export default function App() {
                   </button>
                 )}
                 {utxoWalletError && <div className="message error">{utxoWalletError}</div>}
+                
+                {/* Connected Wallet UTXO Display */}
+                {utxoAddress && showUtxoDetails && (
+                  <div className="mt-4 bg-gradient-to-r from-orange-50 to-yellow-50 rounded-2xl p-4 border border-orange-100">
+                    <div className="flex items-center justify-between mb-3">
+                      <h4 className="font-semibold text-gray-800">Your Wallet UTXOs</h4>
+                      <button 
+                        onClick={() => setShowUtxoDetails(false)}
+                        className="text-xs text-gray-500 hover:text-gray-700"
+                      >
+                        Hide
+                      </button>
+                    </div>
+                    
+                    {utxoError && (
+                      <div className="message error text-sm mb-3">
+                        {utxoError}
+                      </div>
+                    )}
+                    
+                    {utxoData.length > 0 && (
+                      <div className="space-y-2 max-h-40 overflow-y-auto">
+                        {utxoData.map((utxo, index) => (
+                          <div key={index} className="bg-white rounded-lg p-2 border border-orange-200">
+                            <div className="flex justify-between items-center text-xs">
+                              <div>
+                                <div className="font-medium">{utxo.value.toFixed(8)} {chain.toUpperCase()}</div>
+                                <div className="text-gray-500">{utxo.txid.slice(0, 6)}...{utxo.txid.slice(-6)}:{utxo.vout}</div>
+                              </div>
+                              <div className="flex flex-col items-end">
+                                <span className={`px-1 py-0.5 rounded text-xs ${
+                                  utxo.confirmed ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+                                }`}>
+                                  {utxo.confirmed ? '✓' : '⏳'}
+                                </span>
+                                <a 
+                                  href={utxo.explorerUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-blue-600 hover:text-blue-800 text-xs mt-1"
+                                >
+                                  View
+                                </a>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    
+                    {utxoData.length === 0 && !utxoLoading && (
+                      <div className="text-center text-gray-500 text-sm py-2">
+                        No UTXOs found
+                      </div>
+                    )}
+                    
+                    <div className="mt-2 text-xs text-gray-600 bg-orange-50 p-2 rounded">
+                      <strong>Total:</strong> {utxoData.reduce((sum, utxo) => sum + utxo.value, 0).toFixed(8)} {chain.toUpperCase()}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
             
@@ -1253,6 +1373,105 @@ export default function App() {
                   )}
                 </div>
               </div>
+              
+              {/* UTXO Display Section */}
+              {recipient && !recipient.startsWith('0x') && (
+                <div className="bg-gradient-to-r from-orange-50 to-yellow-50 rounded-2xl p-6 border border-orange-100">
+                  <div className="flex items-center mb-6">
+                    <div className="w-10 h-10 bg-gradient-to-r from-orange-500 to-yellow-500 rounded-xl flex items-center justify-center mr-4">
+                      <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                      </svg>
+                    </div>
+                    <h3 className="text-xl font-bold text-gray-900">UTXO Details</h3>
+                  </div>
+                  
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-gray-600">Address: <code className="bg-white px-2 py-1 rounded text-xs">{recipient}</code></span>
+                      <button 
+                        onClick={() => fetchUtxoData(recipient)}
+                        disabled={utxoLoading}
+                        className="btn btn-secondary text-sm px-4 py-2"
+                      >
+                        {utxoLoading ? (
+                          <>
+                            <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            Loading...
+                          </>
+                        ) : (
+                          'View UTXOs'
+                        )}
+                      </button>
+                    </div>
+                    
+                    {utxoError && (
+                      <div className="message error text-sm">
+                        {utxoError}
+                      </div>
+                    )}
+                    
+                    {showUtxoDetails && utxoData.length > 0 && (
+                      <div className="bg-white/50 rounded-lg p-4">
+                        <h4 className="font-semibold mb-3 text-gray-800">Available UTXOs ({utxoData.length})</h4>
+                        <div className="space-y-3 max-h-60 overflow-y-auto">
+                          {utxoData.map((utxo, index) => (
+                            <div key={index} className="bg-white rounded-lg p-3 border border-orange-200">
+                              <div className="flex justify-between items-start mb-2">
+                                <div className="text-sm">
+                                  <div className="font-medium text-gray-800">Value: {utxo.value.toFixed(8)} {chain.toUpperCase()}</div>
+                                  <div className="text-gray-600">Output: {utxo.txid.slice(0, 8)}...{utxo.txid.slice(-8)}:{utxo.vout}</div>
+                                </div>
+                                <div className="flex flex-col items-end">
+                                  <span className={`px-2 py-1 rounded text-xs font-medium ${
+                                    utxo.confirmed ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+                                  }`}>
+                                    {utxo.confirmed ? 'Confirmed' : 'Unconfirmed'}
+                                  </span>
+                                  {utxo.blockHeight && (
+                                    <span className="text-xs text-gray-500 mt-1">Block {utxo.blockHeight}</span>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="flex justify-between items-center">
+                                <a 
+                                  href={utxo.explorerUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="btn btn-secondary text-xs px-3 py-1"
+                                >
+                                  View on Explorer
+                                </a>
+                                <span className="text-xs text-gray-500">
+                                  {utxo.confirmed ? 'Ready to spend' : 'Pending confirmation'}
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="mt-3 text-xs text-gray-600 bg-orange-50 p-2 rounded">
+                          <strong>Total Balance:</strong> {utxoData.reduce((sum, utxo) => sum + utxo.value, 0).toFixed(8)} {chain.toUpperCase()}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {showUtxoDetails && utxoData.length === 0 && !utxoLoading && (
+                      <div className="bg-white/50 rounded-lg p-4 text-center">
+                        <div className="text-gray-500 mb-2">
+                          <svg className="w-8 h-8 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+                          </svg>
+                        </div>
+                        <p className="text-gray-600">No UTXOs found for this address</p>
+                        <p className="text-xs text-gray-500 mt-1">This address has no unspent transaction outputs</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
               
               {/* Advanced Settings Section */}
               <div className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-2xl p-6 border border-purple-100">
