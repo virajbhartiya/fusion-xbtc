@@ -46,6 +46,12 @@ async function main() {
   const refundPubkey = Buffer.from(args.htlcRefundPubkey, 'hex');
   const locktime = parseInt(args.htlcLocktime, 10);
   const redeemPrivkey = ECPair.fromWIF(args.redeemPrivkey, network);
+  // Patch: convert Uint8Array publicKey to Buffer for bitcoinjs-lib v6 compatibility
+  const signer = {
+    publicKey: Buffer.from(redeemPrivkey.publicKey),
+    sign: redeemPrivkey.sign.bind(redeemPrivkey),
+    signSchnorr: undefined,
+  };
   const htlc = buildHTLCScript({ hashlock, recipientPubkey, refundPubkey, locktime });
   const redeemScript = htlc.redeem?.output || htlc.output;
 
@@ -63,7 +69,7 @@ async function main() {
     address: args.destAddress,
     value: parseInt(args.utxoAmount, 10) - parseInt(args.feeSats, 10),
   });
-  psbt.signInput(0, redeemPrivkey);
+  psbt.signInput(0, signer);
   psbt.finalizeAllInputs();
   const txHex = psbt.extractTransaction().toHex();
   const txid = await client.blockchain_transaction_broadcast(txHex);
