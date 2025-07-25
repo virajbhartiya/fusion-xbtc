@@ -2,7 +2,15 @@ import { useState, useEffect } from 'react';
 import { ethers } from 'ethers';
 import './App.css';
 import viteLogo from '/vite.svg';
-import reactLogo from './assets/react.svg';
+import type { Eip1193Provider } from 'ethers';
+import * as bitcoin from 'bitcoinjs-lib';
+
+async function ensureBuffer() {
+  if (typeof window !== 'undefined' && !(window as Window & { Buffer?: typeof import('buffer').Buffer }).Buffer) {
+    const bufferModule = await import('buffer');
+    (window as Window & { Buffer?: typeof import('buffer').Buffer }).Buffer = bufferModule.Buffer;
+  }
+}
 
 const CHAINS = [
   { label: 'Bitcoin', value: 'bitcoin' },
@@ -36,54 +44,67 @@ function explorerLink(chain: string, tx: string) {
 
 declare global {
   interface Window {
-    unisat?: any;
-    btc?: any;
-    xverseBitcoin?: any;
+    unisat?: unknown;
+    btc?: unknown;
+    xverseBitcoin?: unknown;
+    Buffer?: typeof import('buffer').Buffer;
   }
 }
 
-type Provider = { name: string; check: () => any };
+type Provider = { name: string; check: () => unknown };
 
 const WALLET_PROVIDERS: Record<string, Provider[]> = {
   bitcoin: [
-    { name: 'Unisat', check: () => window.unisat },
-    { name: 'Hiro', check: () => window.btc },
-    { name: 'Xverse', check: () => window.xverseBitcoin },
+    { name: 'Unisat', check: () => (window as unknown as { unisat?: unknown }).unisat },
+    { name: 'Hiro', check: () => (window as unknown as { btc?: unknown }).btc },
+    { name: 'Xverse', check: () => (window as unknown as { xverseBitcoin?: unknown }).xverseBitcoin },
   ],
   litecoin: [
-    { name: 'Unisat', check: () => window.unisat },
+    { name: 'Unisat', check: () => (window as unknown as { unisat?: unknown }).unisat },
   ],
   dogecoin: [
-    { name: 'Unisat', check: () => window.unisat },
+    { name: 'Unisat', check: () => (window as unknown as { unisat?: unknown }).unisat },
   ],
   bch: [
-    { name: 'Unisat', check: () => window.unisat },
+    { name: 'Unisat', check: () => (window as unknown as { unisat?: unknown }).unisat },
   ],
 };
 
+async function fetchUtxos(address: string, network: bitcoin.Network): Promise<{ txid: string; vout: number; value: number }[]> {
+  const baseUrl = network === bitcoin.networks.testnet
+    ? 'https://blockstream.info/testnet/api'
+    : 'https://blockstream.info/api';
+  const resp = await fetch(`${baseUrl}/address/${address}/utxo`);
+  if (!resp.ok) throw new Error('Failed to fetch UTXOs');
+  const utxos = await resp.json();
+  return utxos.map((u: { txid: string; vout: number; value: number }) => ({ txid: u.txid, vout: u.vout, value: u.value }));
+}
+
 export default function App() {
-  const [direction, setDirection] = useState('eth2btc');
-  const [chain, setChain] = useState('bitcoin');
-  const [amount, setAmount] = useState('');
-  const [recipient, setRecipient] = useState('');
-  const [secret, setSecret] = useState('');
-  const [hashlock, setHashlock] = useState('');
-  const [timelock, setTimelock] = useState('');
-  const [status, setStatus] = useState('');
-  const [step, setStep] = useState(0);
-  const [log, setLog] = useState<any>(null);
-  const [changeAddress, setChangeAddress] = useState('');
-  const [ethAddress, setEthAddress] = useState('');
-  const [walletError, setWalletError] = useState('');
-  const [ethContract, setEthContract] = useState(import.meta.env.VITE_ETH_HTLC_ADDRESS || ''); // default from env
-  const [txStatus, setTxStatus] = useState('');
-  const [txHash, setTxHash] = useState('');
-  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [direction, setDirection] = useState<string>('eth2btc');
+  const [chain, setChain] = useState<string>('bitcoin');
+  const [amount, setAmount] = useState<string>('');
+  const [recipient, setRecipient] = useState<string>('');
+  const [secret, setSecret] = useState<string>('');
+  const [hashlock, setHashlock] = useState<string>('');
+  const [timelock, setTimelock] = useState<string>('');
+  const [status, setStatus] = useState<string>('');
+  const [step, setStep] = useState<number>(0);
+  const [log, setLog] = useState<Record<string, unknown> | null>(null);
+  const [changeAddress, setChangeAddress] = useState<string>('');
+  const [ethAddress, setEthAddress] = useState<string>('');
+  const [walletError, setWalletError] = useState<string>('');
+  const [ethContract, setEthContract] = useState<string>(import.meta.env.VITE_ETH_HTLC_ADDRESS || '');
+  const [txStatus, setTxStatus] = useState<string>('');
+  const [txHash, setTxHash] = useState<string>('');
+  const [showAdvanced, setShowAdvanced] = useState<boolean>(false);
   const [utxoWallet, setUtxoWallet] = useState<string>('');
   const [utxoAddress, setUtxoAddress] = useState<string>('');
   const [utxoWalletError, setUtxoWalletError] = useState<string>('');
-  const [utxoTxStatus, setUtxoTxStatus] = useState('');
-  const [utxoTxId, setUtxoTxId] = useState('');
+  const [utxoTxStatus, setUtxoTxStatus] = useState<string>('');
+  const [utxoTxId, setUtxoTxId] = useState<string>('');
+
+  useEffect(() => { ensureBuffer(); }, []);
 
   function generateSecret() {
     const arr = new Uint8Array(32);
@@ -97,22 +118,22 @@ export default function App() {
   }
 
   async function connectWallet() {
-    if (!(window as any).ethereum) {
+    const eth = (window as unknown as { ethereum?: unknown }).ethereum as Eip1193Provider | undefined;
+    if (!eth) {
       setWalletError('MetaMask not detected. Please install MetaMask.');
       return;
     }
     try {
-      const accounts = await (window as any).ethereum.request({ method: 'eth_requestAccounts' });
+      const accounts: string[] = await eth.request({ method: 'eth_requestAccounts' });
       setEthAddress(accounts[0]);
       setWalletError('');
-    } catch (err) {
+    } catch {
       setWalletError('Wallet connection failed.');
     }
   }
 
   async function connectUtxoWallet() {
     setUtxoWalletError('');
-    // Wait a bit to allow wallet injection
     await new Promise(res => setTimeout(res, 150));
     const providers = WALLET_PROVIDERS[chain] || [];
     for (const provider of providers) {
@@ -121,14 +142,17 @@ export default function App() {
         try {
           let address = '';
           if (provider.name === 'Unisat') {
-            address = (await window.unisat.requestAccounts())[0];
+            const unisat = (window as unknown as { unisat?: { requestAccounts: () => Promise<string[]> } }).unisat;
+            if (unisat) address = (await unisat.requestAccounts())[0];
           } else if (provider.name === 'Hiro') {
-            address = (await window.btc.request('getAccounts'))[0];
+            const btc = (window as unknown as { btc?: { request: (m: string) => Promise<string[]> } }).btc;
+            if (btc) address = (await btc.request('getAccounts'))[0];
           } else if (provider.name === 'Xverse') {
-            address = (await window.xverseBitcoin.getAccounts())[0];
+            const xverse = (window as unknown as { xverseBitcoin?: { getAccounts: () => Promise<string[]> } }).xverseBitcoin;
+            if (xverse) address = (await xverse.getAccounts())[0];
           }
           setUtxoAddress(address);
-        } catch (e) {
+        } catch {
           setUtxoWalletError('Wallet connection failed. Make sure your wallet is unlocked and the site is allowed.');
         }
         return;
@@ -144,10 +168,11 @@ export default function App() {
   }
 
   async function lockEth() {
-    if (!(window as any).ethereum || !ethAddress || !ethContract) return;
+    const eth = (window as unknown as { ethereum?: unknown }).ethereum as Eip1193Provider | undefined;
+    if (!eth || !ethAddress || !ethContract) return;
     setTxStatus('Sending lock transaction...');
     try {
-      const provider = new ethers.BrowserProvider((window as any).ethereum);
+      const provider = new ethers.BrowserProvider(eth);
       const signer = await provider.getSigner();
       const contract = new ethers.Contract(ethContract, ETHHTLC_ABI, signer);
       const value = ethers.parseEther(amount);
@@ -156,16 +181,17 @@ export default function App() {
       setTxStatus('Waiting for confirmation...');
       await tx.wait();
       setTxStatus('ETH locked!');
-    } catch (e) {
-      setTxStatus('Error: ' + (e as any).message);
+    } catch (e: unknown) {
+      setTxStatus('Error: ' + ((e as Error).message || ''));
     }
   }
 
   async function redeemEth() {
-    if (!(window as any).ethereum || !ethAddress || !ethContract) return;
+    const eth = (window as unknown as { ethereum?: unknown }).ethereum as Eip1193Provider | undefined;
+    if (!eth || !ethAddress || !ethContract) return;
     setTxStatus('Sending redeem transaction...');
     try {
-      const provider = new ethers.BrowserProvider((window as any).ethereum);
+      const provider = new ethers.BrowserProvider(eth);
       const signer = await provider.getSigner();
       const contract = new ethers.Contract(ethContract, ETHHTLC_ABI, signer);
       const tx = await contract.redeem('0x'+secret);
@@ -173,16 +199,17 @@ export default function App() {
       setTxStatus('Waiting for confirmation...');
       await tx.wait();
       setTxStatus('ETH redeemed!');
-    } catch (e) {
-      setTxStatus('Error: ' + (e as any).message);
+    } catch (e: unknown) {
+      setTxStatus('Error: ' + ((e as Error).message || ''));
     }
   }
 
   async function refundEth() {
-    if (!(window as any).ethereum || !ethAddress || !ethContract) return;
+    const eth = (window as unknown as { ethereum?: unknown }).ethereum as Eip1193Provider | undefined;
+    if (!eth || !ethAddress || !ethContract) return;
     setTxStatus('Sending refund transaction...');
     try {
-      const provider = new ethers.BrowserProvider((window as any).ethereum);
+      const provider = new ethers.BrowserProvider(eth);
       const signer = await provider.getSigner();
       const contract = new ethers.Contract(ethContract, ETHHTLC_ABI, signer);
       const tx = await contract.refund('0x'+hashlock);
@@ -190,8 +217,8 @@ export default function App() {
       setTxStatus('Waiting for confirmation...');
       await tx.wait();
       setTxStatus('ETH refunded!');
-    } catch (e) {
-      setTxStatus('Error: ' + (e as any).message);
+    } catch (e: unknown) {
+      setTxStatus('Error: ' + ((e as Error).message || ''));
     }
   }
 
@@ -199,28 +226,66 @@ export default function App() {
     setUtxoTxStatus('Preparing transaction...');
     try {
       if (!utxoWallet || !utxoAddress) throw new Error('No wallet connected');
-      // Example: Unisat API for Bitcoin, Litecoin, Dogecoin, BCH
-      if (utxoWallet === 'Unisat' && window.unisat) {
-        // Build the locking script and transaction (pseudo-code, replace with actual logic)
-        // const txHex = buildLockTx(...);
-        // const signedTx = await window.unisat.signPsbt(txHex);
-        // const txid = await window.unisat.pushPsbt(signedTx);
-        // setUtxoTxId(txid);
-        setUtxoTxStatus('Transaction signed and broadcast (mock).');
-        setUtxoTxId('mock-txid-123');
-      } else if (utxoWallet === 'Hiro' && window.btc) {
-        // Hiro wallet logic here
-        setUtxoTxStatus('Transaction signed and broadcast (mock).');
-        setUtxoTxId('mock-txid-hiro');
-      } else if (utxoWallet === 'Xverse' && window.xverseBitcoin) {
-        // Xverse wallet logic here
-        setUtxoTxStatus('Transaction signed and broadcast (mock).');
-        setUtxoTxId('mock-txid-xverse');
-      } else {
-        throw new Error('Wallet not supported for this chain.');
+      // 1. Get network
+      const network = bitcoin.networks.testnet; // or use getNetwork(chain)
+      // 2. Fetch UTXOs
+      const utxos = await fetchUtxos(utxoAddress, network);
+      if (!utxos.length) throw new Error('No UTXOs found for address');
+      // 3. Build HTLC script
+      // Use Unisat public key from environment variable for both recipient and refund pubkeys
+      // Set VITE_UNISAT_PUBKEY in your .env file (hex string, 33 bytes compressed pubkey)
+      const unisatPubkeyHex = import.meta.env.VITE_UNISAT_PUBKEY;
+      if (!unisatPubkeyHex) throw new Error('VITE_UNISAT_PUBKEY env variable not set');
+      const recipientPubkey = (window.Buffer || Buffer).from(unisatPubkeyHex, 'hex');
+      const refundPubkey = (window.Buffer || Buffer).from(unisatPubkeyHex, 'hex');
+      const hashlockBuf = (window.Buffer || Buffer).from(hashlock, 'hex');
+      const locktimeNum = parseInt(timelock, 10);
+      const htlc = bitcoin.payments.p2sh({
+        redeem: { output: bitcoin.script.compile([
+          bitcoin.opcodes.OP_IF,
+            recipientPubkey,
+            bitcoin.opcodes.OP_CHECKSIGVERIFY,
+            bitcoin.opcodes.OP_SHA256,
+            hashlockBuf,
+            bitcoin.opcodes.OP_EQUALVERIFY,
+          bitcoin.opcodes.OP_ELSE,
+            bitcoin.script.number.encode(locktimeNum),
+            bitcoin.opcodes.OP_CHECKLOCKTIMEVERIFY,
+            bitcoin.opcodes.OP_DROP,
+            refundPubkey,
+            bitcoin.opcodes.OP_CHECKSIGVERIFY,
+          bitcoin.opcodes.OP_ENDIF,
+        ]) }
+      });
+      if (!htlc.address) throw new Error('Failed to build HTLC address');
+      // 4. Build PSBT
+      const amountSats = Math.floor(Number(amount) * 1e8);
+      const feeSats = 500; // TODO: Make configurable
+      const psbt = new bitcoin.Psbt({ network });
+      let inputSum = 0;
+      utxos.forEach(utxo => {
+        psbt.addInput({
+          hash: utxo.txid,
+          index: utxo.vout,
+          witnessUtxo: { script: bitcoin.address.toOutputScript(utxoAddress, network), value: utxo.value },
+        });
+        inputSum += utxo.value;
+      });
+      psbt.addOutput({ address: htlc.address, value: amountSats });
+      const change = inputSum - amountSats - feeSats;
+      if (change > 0) {
+        psbt.addOutput({ address: changeAddress, value: change });
       }
-    } catch (e: any) {
-      setUtxoTxStatus('Error: ' + (e.message || 'Failed to sign or broadcast.'));
+      // 5. Serialize PSBT and sign with Unisat
+      const psbtHex = psbt.toHex();
+      const unisat = (window as unknown as { unisat?: { signPsbt: (psbtHex: string) => Promise<string>; pushPsbt: (signedPsbtHex: string) => Promise<string> } }).unisat;
+      if (!unisat) throw new Error('Unisat wallet not found');
+      const signedPsbtHex = await unisat.signPsbt(psbtHex);
+      const txid = await unisat.pushPsbt(signedPsbtHex);
+      setUtxoTxStatus('Transaction signed and broadcast.');
+      setUtxoTxId(txid);
+    } catch (e: unknown) {
+      setUtxoTxStatus('Error: ' + ((e as Error).message || 'Failed to sign or broadcast.'));
     }
   }
 
@@ -300,11 +365,11 @@ export default function App() {
       <section className="supported-chains" aria-label="Supported Chains">
         <h2 tabIndex={0}>Supported Chains</h2>
         <div className="chains-list">
-          <div className="chain"><img src="https://cryptologos.cc/logos/bitcoin-btc-logo.svg?v=029" alt="Bitcoin logo" /><span>Bitcoin</span></div>
-          <div className="chain"><img src="https://cryptologos.cc/logos/ethereum-eth-logo.svg?v=029" alt="Ethereum logo" /><span>Ethereum</span></div>
-          <div className="chain"><img src="https://cryptologos.cc/logos/litecoin-ltc-logo.svg?v=029" alt="Litecoin logo" /><span>Litecoin</span></div>
-          <div className="chain"><img src="https://cryptologos.cc/logos/dogecoin-doge-logo.svg?v=029" alt="Dogecoin logo" /><span>Dogecoin</span></div>
-          <div className="chain"><img src="https://cryptologos.cc/logos/bitcoin-cash-bch-logo.svg?v=029" alt="Bitcoin Cash logo" /><span>Bitcoin Cash</span></div>
+          <div className="chain"><img src="https://cdn.jsdelivr.net/gh/spothq/cryptocurrency-icons/svg/color/btc.svg" alt="Bitcoin logo" /><span>Bitcoin</span></div>
+          <div className="chain"><img src="https://cdn.jsdelivr.net/gh/spothq/cryptocurrency-icons/svg/color/eth.svg" alt="Ethereum logo" /><span>Ethereum</span></div>
+          <div className="chain"><img src="https://cdn.jsdelivr.net/gh/spothq/cryptocurrency-icons/svg/color/ltc.svg" alt="Litecoin logo" /><span>Litecoin</span></div>
+          <div className="chain"><img src="https://cdn.jsdelivr.net/gh/spothq/cryptocurrency-icons/svg/color/doge.svg" alt="Dogecoin logo" /><span>Dogecoin</span></div>
+          <div className="chain"><img src="https://cdn.jsdelivr.net/gh/spothq/cryptocurrency-icons/svg/color/bch.svg" alt="Bitcoin Cash logo" /><span>Bitcoin Cash</span></div>
         </div>
       </section>
 
@@ -390,13 +455,24 @@ export default function App() {
             {log && (
               <div style={{marginTop: 16}}>
                 <b>Swap Log:</b>
-                <pre>{JSON.stringify(log, null, 2)}</pre>
-                {log.ethTx && (
+                <table style={{marginTop:8,marginBottom:8,borderCollapse:'collapse',fontSize:'0.97em'}}>
+                  <tbody>
+                    {Object.entries(log).map(([k, v]) => (
+                      (k !== 'ethTx' && k !== 'btcTx') ? (
+                        <tr key={k}>
+                          <td style={{fontWeight:600,padding:'2px 8px',border:'1px solid #eee'}}>{k}</td>
+                          <td style={{fontFamily:'monospace',padding:'2px 8px',border:'1px solid #eee'}}>{typeof v === 'object' ? JSON.stringify(v) : String(v)}</td>
+                        </tr>
+                      ) : null
+                    ))}
+                  </tbody>
+                </table>
+                {'ethTx' in log && typeof log.ethTx === 'string' && (
                   <div>
                     <a href={explorerLink('ethereum', log.ethTx)} target="_blank" rel="noopener noreferrer">View ETH Tx</a>
                   </div>
                 )}
-                {log.btcTx && (
+                {'btcTx' in log && typeof log.btcTx === 'string' && (
                   <div>
                     <a href={explorerLink(chain, log.btcTx)} target="_blank" rel="noopener noreferrer">View BTC Tx</a>
                   </div>

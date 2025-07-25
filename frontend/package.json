@@ -10,6 +10,10 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@esbuild-plugins/node-globals-polyfill": "^0.2.3",
+    "@esbuild-plugins/node-modules-polyfill": "^0.2.2",
+    "bitcoinjs-lib": "^6.1.7",
+    "buffer": "^6.0.3",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
   },
