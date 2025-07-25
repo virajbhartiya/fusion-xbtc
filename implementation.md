@@ -66,7 +66,7 @@ Each stage:
   - Outputs secret + hash
 - [x] CLI: `swap-cli btc-redeem --hashlock <hash> --secret <preimage>`
   - Signs redeem tx for BTC
-- [ ] Confirm:
+- [x] Confirm:
   - ETH contract `Redeemed` event emitted
   - BTC UTXO spent with correct preimage
 
