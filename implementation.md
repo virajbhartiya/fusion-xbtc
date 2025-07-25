@@ -61,10 +61,10 @@ Each stage:
 **Goal:** Run end-to-end ETH → BTC swap using CLI and manual secret propagation.
 
 **Steps:**
-- [ ] CLI: `swap-cli eth2btc --amount 0.01 --recipient <btc-pubkey>`
+- [x] CLI: `swap-cli eth2btc --amount 0.01 --recipient <btc-pubkey>`
   - Locks ETH
   - Outputs secret + hash
-- [ ] CLI: `swap-cli btc-redeem --hashlock <hash> --secret <preimage>`
+- [x] CLI: `swap-cli btc-redeem --hashlock <hash> --secret <preimage>`
   - Signs redeem tx for BTC
 - [ ] Confirm:
   - ETH contract `Redeemed` event emitted
