@@ -1,5 +1,30 @@
 # NOTE: This frontend expects a backend endpoint /api/track?hashlock=... to serve swap log status for real-time updates.
 
+# Fusion+ Frontend — Wallet Integration
+
+## Wallet Integration (UTXO Chains)
+
+This frontend now supports browser-based wallet integration for Bitcoin, Litecoin, Dogecoin, and Bitcoin Cash. Users can:
+
+- Connect their browser wallet (Unisat, Hiro, Xverse, etc.) for the selected UTXO chain
+- Sign and broadcast transactions directly from the UI (no copy-paste/manual steps required)
+- See connection status, errors, and transaction feedback in real time
+
+### Supported Wallets
+- **Bitcoin:** Unisat, Hiro, Xverse
+- **Litecoin, Dogecoin, BCH:** Unisat
+
+### How to Use
+1. Select swap direction and UTXO chain
+2. Click "Connect Wallet" to connect your browser wallet
+3. Fill in swap details and start the swap
+4. Use the "Lock Funds (Wallet)" button to sign and broadcast the HTLC transaction
+5. Monitor status and follow on-screen instructions for redeem/refund
+
+> **Note:** ETH actions still use MetaMask. UTXO chains now use browser wallet APIs for all signing and broadcasting.
+
+---
+
 # React + TypeScript + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
