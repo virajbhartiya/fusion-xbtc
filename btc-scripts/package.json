@@ -6,7 +6,9 @@
   "dependencies": {
     "bitcoinjs-lib": "^6.1.7",
     "bitcore-lib": "^10.10.7",
-    "electrum-client": "^0.0.6",
-    "zod": "^4.0.8"
+    "electrum-client": "^0.0.6"
+  },
+  "devDependencies": {
+    "@types/node": "^24.1.0"
   }
 }
