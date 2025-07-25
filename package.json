@@ -11,5 +11,9 @@
 		"solc": "^0.8.30",
 		"typescript": "^5.8.3",
 		"viem": "^2.33.0"
+	},
+	"dependencies": {
+		"ecpair": "^3.0.0",
+		"tiny-secp256k1": "^2.2.4"
 	}
 }

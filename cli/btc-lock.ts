@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import * as bitcoin from 'bitcoinjs-lib';
-import { buildHTLCScript } from '../btc-scripts/htlc.js';
+import { buildHTLCScript, getNetwork } from '../btc-scripts/htlc.js';
 
 const argsSchema = z.object({
   hashlock: z.string(),
@@ -9,6 +9,7 @@ const argsSchema = z.object({
   locktime: z.string(),
   amount: z.string(),
   network: z.string().default('testnet'),
+  chain: z.string().default('bitcoin'),
 });
 
 const args = argsSchema.parse(Object.fromEntries(process.argv.slice(2).map(arg => {
@@ -16,7 +17,7 @@ const args = argsSchema.parse(Object.fromEntries(process.argv.slice(2).map(arg =
   return [k, v];
 })));
 
-const network = bitcoin.networks[args.network];
+const network = getNetwork(args.chain as 'bitcoin' | 'litecoin' | 'dogecoin');
 const hashlock = Buffer.from(args.hashlock.replace(/^0x/, ''), 'hex');
 const recipientPubkey = Buffer.from(args.recipientPubkey, 'hex');
 const refundPubkey = Buffer.from(args.refundPubkey, 'hex');

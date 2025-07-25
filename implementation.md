@@ -94,12 +94,12 @@ Each stage:
 **Goal:** Enable BTC user to initiate swap and ETH user to redeem.
 
 **Steps:**
-- [ ] CLI: `swap-cli btc2eth --amount 0.002 --recipient <eth-address>`
+- [x] CLI: `swap-cli btc2eth --amount 0.002 --recipient <eth-address>`
   - Locks BTC in HTLC
   - Outputs secret + hash
-- [ ] ETH user uses hash to call `lock` on ETH HTLC
-- [ ] BTC redeemer redeems BTC with preimage
-- [ ] ETH user picks up secret and redeems ETH
+- [x] ETH user uses hash to call `lock` on ETH HTLC
+- [x] BTC redeemer redeems BTC with preimage
+- [x] ETH user picks up secret and redeems ETH
 
 **Output:** Reverse direction flow works. BTC HTLC drives ETH redemption path.
 
@@ -146,6 +146,21 @@ Each stage:
 - [ ] Logs stored per-chain under `/examples/doge/`, `/examples/ltc/`
 
 **Output:** Same ETH contract supports multiple UTXO chains via script config.
+
+---
+
+## STAGE 9 — PARTIAL FILLS (ADVANCED)
+
+**Goal:** Enable partial fills for cross-chain swaps, allowing multiple parties to fill a swap intent incrementally.
+
+**Steps:**
+- [ ] Extend swap intent format to allow partial fill tracking (e.g., add `filledAmount`, `remainingAmount`).
+- [ ] Modify CLI and relayer to support splitting a swap into multiple HTLCs, each representing a partial fill.
+- [ ] Implement a stateful relayer or offchain orderbook to match and track partial fills, updating onchain state as each fill occurs.
+- [ ] Adjust ETH contract and BTC script logic to allow incremental redemption or multiple redemptions up to the total amount (e.g., via multiple HTLCs or a single contract with partial fill logic).
+- [ ] Add CLI and relayer commands for partial fill offers, fills, and status tracking.
+
+**Output:** Swaps can be filled by multiple parties in increments, with onchain and offchain state tracking partial fills.
 
 ---
 
