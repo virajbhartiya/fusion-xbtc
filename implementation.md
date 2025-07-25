@@ -82,7 +82,7 @@ Each stage:
 - [x] Monitor ETH HTLC contract for `Redeemed(secret)`
 - [x] Parse tx logs and extract `secret`
 - [x] Compose BTC redeem tx with `secret`
-- [ ] Broadcast via Electrum or RPC node
+- [x] Broadcast via Electrum or RPC node
 - [ ] Backfill: monitor BTC HTLC as well (for reverse direction)
 
 **Output:** Relayer listens on both chains and redeems HTLCs without human intervention.
