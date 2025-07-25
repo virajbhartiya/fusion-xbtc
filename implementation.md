@@ -46,11 +46,11 @@ Each stage:
 **Goal:** Lock BTC to a hash-locked script with manual transaction creation.
 
 **Steps:**
-- [ ] Write raw Bitcoin script (P2SH) using `OP_SHA256`, `OP_CHECKLOCKTIMEVERIFY`, `OP_CHECKSIG`
-- [ ] Build transaction that:
+- [x] Write raw Bitcoin script (P2SH) using `OP_SHA256`, `OP_CHECKLOCKTIMEVERIFY`, `OP_CHECKSIG`
+- [x] Build transaction that:
   - Sends BTC to the script
   - Broadcasts via Bitcoin Testnet node (regtest fallback)
-- [ ] Write script extractor + parser for validation
+- [x] Write script extractor + parser for validation
 
 **Output:** BTC locked into HTLC address. Script verified. Redeem path calculable.
 
