@@ -64,6 +64,7 @@ export default function App() {
   const [direction, setDirection] = useState<string>('eth2btc');
   const [chain, setChain] = useState<string>('bitcoin');
   const [amount, setAmount] = useState<string>('');
+  const [btcAmount, setBtcAmount] = useState<string>('');
   const [recipient, setRecipient] = useState<string>('');
   const [secret, setSecret] = useState<string>('');
   const [hashlock, setHashlock] = useState<string>('');
@@ -177,26 +178,39 @@ export default function App() {
     return () => clearInterval(interval);
   }, []);
 
-  // Calculate amounts based on real exchange rate
-  function calculateAmounts(inputAmount: string, inputDirection: string) {
-    if (!exchangeRate || !inputAmount) return { input: inputAmount, output: '0' };
-    
-    const amount = parseFloat(inputAmount);
-    if (isNaN(amount)) return { input: inputAmount, output: '0' };
-    
-    if (inputDirection === 'eth2btc') {
-      const btcAmount = amount * exchangeRate;
-      return {
-        input: inputAmount,
-        output: btcAmount.toFixed(8)
-      };
-    } else {
-      const ethAmount = amount / exchangeRate;
-      return {
-        input: inputAmount,
-        output: ethAmount.toFixed(6)
-      };
+
+  // Calculate BTC amount when ETH amount changes
+  function calculateBtcFromEth(ethAmount: string) {
+    if (!exchangeRate || !ethAmount) {
+      setBtcAmount('');
+      return;
     }
+    
+    const amount = parseFloat(ethAmount);
+    if (isNaN(amount)) {
+      setBtcAmount('');
+      return;
+    }
+    
+    const btcAmount = amount * exchangeRate;
+    setBtcAmount(btcAmount.toFixed(8));
+  }
+
+  // Calculate ETH amount when BTC amount changes
+  function calculateEthFromBtc(btcAmount: string) {
+    if (!exchangeRate || !btcAmount) {
+      setAmount('');
+      return;
+    }
+    
+    const amount = parseFloat(btcAmount);
+    if (isNaN(amount)) {
+      setAmount('');
+      return;
+    }
+    
+    const ethAmount = amount / exchangeRate;
+    setAmount(ethAmount.toFixed(6));
   }
 
   function generateSecret() {
@@ -914,14 +928,19 @@ export default function App() {
                       <svg className="w-4 h-4 mr-2 text-green-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" />
                       </svg>
-                      <span className="truncate">Amount</span>
+                      <span className="truncate">Amount to Send</span>
                     </label>
                     <div className="relative">
                       <input 
                         className="form-input pr-12" 
                         type="text" 
                         value={amount} 
-                        onChange={e => setAmount(e.target.value)} 
+                        onChange={e => {
+                          setAmount(e.target.value);
+                          if (direction === 'eth2btc') {
+                            calculateBtcFromEth(e.target.value);
+                          }
+                        }} 
                         placeholder="e.g. 0.01" 
                       />
                       <div className="absolute inset-y-0 right-0 flex items-center pr-3">
@@ -930,66 +949,98 @@ export default function App() {
                         </span>
                       </div>
                     </div>
-                    {amount && (
-                      <div className="mt-2 text-sm text-gray-600 bg-white/50 rounded-lg p-2">
-                        <div className="flex justify-between items-center mb-1">
-                          <span className="truncate">You'll receive:</span>
-                          <span className="font-semibold ml-2">
-                            {direction === 'eth2btc' 
-                              ? `${calculateAmounts(amount, direction).output} BTC`
-                              : `${calculateAmounts(amount, direction).output} ETH`
-                            }
-                          </span>
-                        </div>
-                        {exchangeRate && (
-                          <div className="flex justify-between items-center text-xs">
-                            <span className="truncate">Rate:</span>
-                            <span className="font-medium ml-2">
-                              {direction === 'eth2btc' 
-                                ? `1 ETH = ${exchangeRate.toFixed(6)} BTC`
-                                : `1 BTC = ${(1/exchangeRate).toFixed(2)} ETH`
-                              }
-                            </span>
-                          </div>
-                        )}
-                        {rateError && (
-                          <div className="text-orange-600 text-xs mt-1">
-                            ⚠️ {rateError}
-                          </div>
-                        )}
-                        {rateLoading && (
-                          <div className="text-blue-600 text-xs mt-1">
-                            🔄 Updating rates...
-                          </div>
-                        )}
-                      </div>
-                    )}
                   </div>
                   
                   <div>
                     <label className="form-label flex items-center">
                       <svg className="w-4 h-4 mr-2 text-green-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" />
                       </svg>
-                      <span className="truncate">Recipient Address</span>
+                      <span className="truncate">Amount to Receive</span>
                     </label>
-                    <input 
-                      className="form-input" 
-                      type="text" 
-                      value={recipient} 
-                      onChange={e => setRecipient(e.target.value)} 
-                      placeholder={getRecipientPlaceholder()} 
-                    />
-                    {recipient && (
-                      <div className="mt-2 text-sm text-gray-600 bg-white/50 rounded-lg p-2">
-                        <div className="flex items-center">
-                          <div className={`w-2 h-2 rounded-full mr-2 flex-shrink-0 ${recipient.startsWith('0x') ? 'bg-green-500' : 'bg-blue-500'}`}></div>
-                          <span className="truncate">{recipient.startsWith('0x') ? 'Ethereum address' : `${chain.toUpperCase()} address`}</span>
-                        </div>
+                    <div className="relative">
+                      <input 
+                        className="form-input pr-12" 
+                        type="text" 
+                        value={btcAmount} 
+                        onChange={e => {
+                          setBtcAmount(e.target.value);
+                          if (direction === 'eth2btc') {
+                            calculateEthFromBtc(e.target.value);
+                          }
+                        }} 
+                        placeholder="e.g. 0.0005" 
+                      />
+                      <div className="absolute inset-y-0 right-0 flex items-center pr-3">
+                        <span className="text-gray-500 text-sm font-medium">
+                          {direction === 'eth2btc' ? 'BTC' : 'ETH'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Exchange Rate Display */}
+                {exchangeRate && (
+                  <div className="mt-4 text-sm text-gray-600 bg-white/50 rounded-lg p-3">
+                    <div className="flex justify-between items-center mb-1">
+                      <span className="truncate">Current Rate:</span>
+                      <span className="font-semibold ml-2">
+                        {direction === 'eth2btc' 
+                          ? `1 ETH = ${exchangeRate.toFixed(6)} BTC`
+                          : `1 BTC = ${(1/exchangeRate).toFixed(2)} ETH`
+                        }
+                      </span>
+                    </div>
+                    {rateError && (
+                      <div className="text-orange-600 text-xs mt-1">
+                        ⚠️ {rateError}
+                      </div>
+                    )}
+                    {rateLoading && (
+                      <div className="text-blue-600 text-xs mt-1">
+                        🔄 Updating rates...
                       </div>
                     )}
                   </div>
+                )}
+              </div>
+              
+              {/* Recipient Address Section */}
+              <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-2xl p-6 border border-green-100">
+                <div className="flex items-center mb-6">
+                  <div className="w-10 h-10 bg-gradient-to-r from-green-500 to-emerald-500 rounded-xl flex items-center justify-center mr-4">
+                    <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                  </div>
+                  <h3 className="text-xl font-bold text-gray-900">Recipient Details</h3>
+                </div>
+                
+                <div>
+                  <label className="form-label flex items-center">
+                    <svg className="w-4 h-4 mr-2 text-green-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                    <span className="truncate">Recipient Address</span>
+                  </label>
+                  <input 
+                    className="form-input" 
+                    type="text" 
+                    value={recipient} 
+                    onChange={e => setRecipient(e.target.value)} 
+                    placeholder={getRecipientPlaceholder()} 
+                  />
+                  {recipient && (
+                    <div className="mt-2 text-sm text-gray-600 bg-white/50 rounded-lg p-2">
+                      <div className="flex items-center">
+                        <div className={`w-2 h-2 rounded-full mr-2 flex-shrink-0 ${recipient.startsWith('0x') ? 'bg-green-500' : 'bg-blue-500'}`}></div>
+                        <span className="truncate">{recipient.startsWith('0x') ? 'Ethereum address' : `${chain.toUpperCase()} address`}</span>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
               
@@ -1224,7 +1275,7 @@ export default function App() {
                         </div>
                       )}
                       <div><strong>Status:</strong> {order.status}</div>
-                      <div><strong>Maker:</strong> <code className="bg-gray-100 px-2 py-1 rounded text-sm text-xs">{order.maker?.slice(0, 10)}...{order.maker?.slice(-8)}</code></div>
+                      <div><strong>Maker:</strong> <code className="bg-gray-100 px-2 py-1 rounded text-sm">{order.maker?.slice(0, 10)}...{order.maker?.slice(-8)}</code></div>
                       <button 
                         onClick={() => selectOrder(order.orderId)}
                         className="btn btn-primary mt-2 px-4 py-2 text-sm"
