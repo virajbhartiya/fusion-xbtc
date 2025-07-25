@@ -4,7 +4,9 @@
   "main": "index.js",
   "license": "MIT",
   "dependencies": {
+    "ecpair": "^3.0.0",
     "electrum-client": "^0.0.6",
+    "tiny-secp256k1": "^2.2.4",
     "zod": "^4.0.8"
   }
 }
