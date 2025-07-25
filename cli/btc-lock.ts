@@ -25,7 +25,7 @@ const args = argsSchema.parse(Object.fromEntries(process.argv.slice(2).map(arg =
   return [k, v];
 })));
 
-const network = getNetwork(args.chain as 'bitcoin' | 'litecoin' | 'dogecoin');
+const network = getNetwork(args.chain as 'bitcoin' | 'litecoin' | 'dogecoin' | 'bch');
 const hashlock = Buffer.from(args.hashlock.replace(/^0x/, ''), 'hex');
 const recipientPubkey = Buffer.from(args.recipientPubkey, 'hex');
 const refundPubkey = Buffer.from(args.refundPubkey, 'hex');
@@ -69,12 +69,14 @@ async function main() {
   await client.connect();
   const txid = await client.blockchain_transaction_broadcast(txHex);
   await client.close();
-  const chain = args.chain as 'bitcoin' | 'litecoin' | 'dogecoin';
+  const chain = args.chain as 'bitcoin' | 'litecoin' | 'dogecoin' | 'bch';
   const logDir = chain === 'dogecoin'
     ? path.resolve(__dirname, '../examples/doge')
     : chain === 'litecoin'
       ? path.resolve(__dirname, '../examples/ltc')
-      : path.resolve(__dirname, '../examples/swaps');
+      : chain === 'bch'
+        ? path.resolve(__dirname, '../examples/bch')
+        : path.resolve(__dirname, '../examples/swaps');
   if (!fs.existsSync(logDir)) fs.mkdirSync(logDir, { recursive: true });
   const logPath = path.join(logDir, `${args.hashlock}.json`);
   const logData = {

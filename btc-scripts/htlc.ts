@@ -25,7 +25,7 @@ export function buildHTLCScript({ hashlock, recipientPubkey, refundPubkey, lockt
   return bitcoin.payments.p2sh({ redeem: { output: script } });
 }
 
-export function getNetwork(chain: 'bitcoin' | 'litecoin' | 'dogecoin'): bitcoin.Network {
+export function getNetwork(chain: 'bitcoin' | 'litecoin' | 'dogecoin' | 'bch'): bitcoin.Network {
   if (chain === 'bitcoin') return bitcoin.networks.bitcoin;
   if (chain === 'litecoin') {
     return {
@@ -45,6 +45,16 @@ export function getNetwork(chain: 'bitcoin' | 'litecoin' | 'dogecoin'): bitcoin.
       pubKeyHash: 0x1e,
       scriptHash: 0x16,
       wif: 0x9e,
+    } as bitcoin.Network;
+  }
+  if (chain === 'bch') {
+    return {
+      messagePrefix: '\x18Bitcoin Cash Signed Message:\n',
+      bech32: 'bch',
+      bip32: { public: 0x0488b21e, private: 0x0488ade4 },
+      pubKeyHash: 0x00,
+      scriptHash: 0x05,
+      wif: 0x80,
     } as bitcoin.Network;
   }
   throw new Error('Unsupported chain');

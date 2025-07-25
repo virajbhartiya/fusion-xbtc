@@ -34,7 +34,7 @@ const args = argsSchema.parse(Object.fromEntries(process.argv.slice(2).map(arg =
 })));
 
 async function main() {
-  const network = getNetwork(args.chain as 'bitcoin' | 'litecoin' | 'dogecoin');
+  const network = getNetwork(args.chain as 'bitcoin' | 'litecoin' | 'dogecoin' | 'bch');
   const client = new ElectrumClient(
     parseInt(args.electrumPort, 10),
     args.electrumHost,
@@ -77,12 +77,14 @@ async function main() {
     status: 'broadcasted',
   }, null, 2));
 
-  const chain = args.chain as 'bitcoin' | 'litecoin' | 'dogecoin';
+  const chain = args.chain as 'bitcoin' | 'litecoin' | 'dogecoin' | 'bch';
   const logDir = chain === 'dogecoin'
     ? path.resolve(__dirname, '../examples/doge')
     : chain === 'litecoin'
       ? path.resolve(__dirname, '../examples/ltc')
-      : path.resolve(__dirname, '../examples/swaps');
+      : chain === 'bch'
+        ? path.resolve(__dirname, '../examples/bch')
+        : path.resolve(__dirname, '../examples/swaps');
   const logPath = path.join(logDir, `${args.htlcScript}.json`); // Use htlcScript as unique identifier if hashlock not available
   let logData = {};
   if (fs.existsSync(logPath)) {

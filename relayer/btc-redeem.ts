@@ -38,7 +38,7 @@ async function main() {
     args.electrumHost,
     args.electrumProto
   );
-  await client.connect();
+  await (client as any).connect();
 
   const hashlock = Buffer.from(args.hashlock.replace(/^0x/, ''), 'hex');
   const secret = Buffer.from(args.secret.replace(/^0x/, ''), 'hex');
@@ -72,8 +72,8 @@ async function main() {
   psbt.signInput(0, signer);
   psbt.finalizeAllInputs();
   const txHex = psbt.extractTransaction().toHex();
-  const txid = await client.blockchain_transaction_broadcast(txHex);
-  await client.close();
+  const txid = await (client as any).blockchain_transaction_broadcast(txHex);
+  await (client as any).close();
   console.log(JSON.stringify({
     event: 'btc-redeem-broadcast',
     txid,

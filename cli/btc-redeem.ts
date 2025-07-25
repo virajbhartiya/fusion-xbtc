@@ -29,19 +29,21 @@ const args = argsSchema.parse(Object.fromEntries(process.argv.slice(2).map(arg =
   return [k, v];
 })));
 
-const network = getNetwork(args.chain as 'bitcoin' | 'litecoin' | 'dogecoin');
+const network = getNetwork(args.chain as 'bitcoin' | 'litecoin' | 'dogecoin' | 'bch');
 
 const relayerArgs = Object.entries(args).map(([k, v]) => `--${k}=${v}`);
 const result = spawnSync('pnpm', ['--filter', 'relayer', 'exec', 'ts-node', 'relayer/btc-redeem.ts', ...relayerArgs], { encoding: 'utf-8' });
 if (result.stdout) process.stdout.write(result.stdout);
 if (result.stderr) process.stderr.write(result.stderr);
 
-  const chain = args.chain as 'bitcoin' | 'litecoin' | 'dogecoin';
+  const chain = args.chain as 'bitcoin' | 'litecoin' | 'dogecoin' | 'bch';
   const logDir = chain === 'dogecoin'
     ? path.resolve(__dirname, '../examples/doge')
     : chain === 'litecoin'
       ? path.resolve(__dirname, '../examples/ltc')
-      : path.resolve(__dirname, '../examples/swaps');
+      : chain === 'bch'
+        ? path.resolve(__dirname, '../examples/bch')
+        : path.resolve(__dirname, '../examples/swaps');
   const logPath = path.join(logDir, `${args.hashlock}.json`);
   let logData = {};
   if (fs.existsSync(logPath)) {

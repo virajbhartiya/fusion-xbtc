@@ -23,15 +23,15 @@ async function main() {
     args.electrumHost,
     args.electrumProto
   );
-  await client.connect();
-  const tx = await client.blockchain_transaction_get(args.txid, true);
+  await (client as any).connect();
+  const tx = await client.blockchainTransaction_get(args.txid, true);
   const vout = parseInt(args.vout, 10);
   const output = tx.vout[vout];
   const scriptHex = args.script;
   const scriptHash = bitcoin.crypto.sha256(Buffer.from(scriptHex, 'hex')).reverse().toString('hex');
-  const history = await client.blockchain_scripthash_get_history(scriptHash);
+  const history = await client.blockchainScripthash_getHistory(scriptHash);
   for (const h of history) {
-    const spendTx = await client.blockchain_transaction_get(h.tx_hash, true);
+    const spendTx = await client.blockchainTransaction_get(h.tx_hash, true);
     for (const vin of spendTx.vin) {
       if (vin.txid === args.txid && vin.vout === vout) {
         // Try to extract secret from scriptSig or witness
@@ -52,7 +52,7 @@ async function main() {
       }
     }
   }
-  await client.close();
+  await (client as any).close();
 }
 
 main(); 

@@ -49,10 +49,10 @@ async function broadcastBtcRedeem(secret: string, hashlock: string) {
     args.electrumHost,
     args.electrumProto
   );
-  await client.connect();
+  await (client as any).connect();
   const txHex = psbt.finalizeAllInputs().extractTransaction().toHex();
-  const txid = await client.blockchain_transaction_broadcast(txHex);
-  await client.close();
+  const txid = await (client as any).blockchain_transaction_broadcast(txHex);
+  await (client as any).close();
   console.log(JSON.stringify({
     event: 'btc-redeem-broadcast',
     txid,
