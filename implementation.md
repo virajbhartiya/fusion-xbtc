@@ -79,9 +79,9 @@ Each stage:
 **Goal:** Build stateless relay engine that monitors chains and relays secrets.
 
 **Steps:**
-- [ ] Monitor ETH HTLC contract for `Redeemed(secret)`
-- [ ] Parse tx logs and extract `secret`
-- [ ] Compose BTC redeem tx with `secret`
+- [x] Monitor ETH HTLC contract for `Redeemed(secret)`
+- [x] Parse tx logs and extract `secret`
+- [x] Compose BTC redeem tx with `secret`
 - [ ] Broadcast via Electrum or RPC node
 - [ ] Backfill: monitor BTC HTLC as well (for reverse direction)
 
