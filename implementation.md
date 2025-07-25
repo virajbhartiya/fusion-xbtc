@@ -20,7 +20,7 @@ Each stage:
 - [x] Install core tooling:
   - Ethereum: `hardhat`, `ethers`, `viem`, `solidity`, `forge`
   - Bitcoin: `bitcoinjs-lib`, `bitcore-lib`, `electrum-client`
-- [ ] Add shell CLI (`pnpm cli`) with single stub command
+- [x] Add shell CLI (`pnpm cli`) with single stub command
 - [x] Create shared types in `common/types.ts`: `HTLCParams`, `SwapDirection`, `SwapState`
 
 **Output:** Monorepo compiles. CLI and contracts test runners execute. Structure in place.
