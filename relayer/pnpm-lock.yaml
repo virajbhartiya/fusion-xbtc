@@ -1,0 +1,31 @@
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
+importers:
+
+  .:
+    dependencies:
+      electrum-client:
+        specifier: ^0.0.6
+        version: 0.0.6
+      zod:
+        specifier: ^4.0.8
+        version: 4.0.8
+
+packages:
+
+  electrum-client@0.0.6:
+    resolution: {integrity: sha512-u6B63JbWuufkPr7/DVPfCtMbefeqU+R6oYlwUyiZ7cGMUgbjbJYBk8+wQnJm3K+uXOupoDeyOgVHoFjz5vMwrQ==}
+    engines: {node: '>=6'}
+
+  zod@4.0.8:
+    resolution: {integrity: sha512-+MSh9cZU9r3QKlHqrgHMTSr3QwMGv4PLfR0M4N/sYWV5/x67HgXEhIGObdBkpnX8G78pTgWnIrBL2lZcNJOtfg==}
+
+snapshots:
+
+  electrum-client@0.0.6: {}
+
+  zod@4.0.8: {}

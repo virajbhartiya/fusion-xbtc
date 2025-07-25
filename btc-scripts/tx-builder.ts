@@ -1,5 +1,4 @@
 import * as bitcoin from 'bitcoinjs-lib';
-import { ECPairInterface } from 'bitcoinjs-lib/src/ecpair';
 
 export function buildLockTx({
   utxos,
