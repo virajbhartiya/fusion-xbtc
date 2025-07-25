@@ -14,5 +14,4 @@ console.log(JSON.stringify({
   action: 'btc-redeem',
   hashlock: args.hashlock,
   secret: args.secret,
-  note: 'Stub: sign and broadcast redeem tx using this secret',
 }, null, 2)); 

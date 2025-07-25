@@ -42,13 +42,11 @@ async function main() {
             event: 'btc-redeem',
             txid: h.tx_hash,
             secret,
-            note: 'HTLC redeemed with this secret',
           }, null, 2));
         } else {
           console.log(JSON.stringify({
             event: 'btc-refund',
             txid: h.tx_hash,
-            note: 'HTLC refunded (no secret revealed)',
           }, null, 2));
         }
       }

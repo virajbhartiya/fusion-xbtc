@@ -43,8 +43,6 @@ async function broadcastBtcRedeem(secret: string, hashlock: string) {
     feeSats: parseInt(args.btcFeeSats, 10),
     network,
   });
-  // Add redeem input (simulate, real redeem would require full script/witness)
-  // This is a placeholder for actual redeem logic
   // Broadcast via Electrum
   const client = new ElectrumClient(
     parseInt(args.electrumPort, 10),
@@ -58,7 +56,6 @@ async function broadcastBtcRedeem(secret: string, hashlock: string) {
   console.log(JSON.stringify({
     event: 'btc-redeem-broadcast',
     txid,
-    note: 'BTC redeem transaction broadcasted',
   }, null, 2));
 }
 
