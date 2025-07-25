@@ -2,5 +2,11 @@
   "name": "btc-scripts",
   "version": "0.1.0",
   "main": "index.js",
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "bitcoinjs-lib": "^6.1.7",
+    "bitcore-lib": "^10.10.7",
+    "electrum-client": "^0.0.6",
+    "zod": "^4.0.8"
+  }
 }

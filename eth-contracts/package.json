@@ -2,5 +2,11 @@
   "name": "eth-contracts",
   "version": "0.1.0",
   "main": "index.js",
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "ethers": "^6.15.0",
+    "hardhat": "^2.26.1",
+    "viem": "^2.33.0",
+    "zod": "^4.0.8"
+  }
 }
