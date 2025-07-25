@@ -4,6 +4,9 @@
   "main": "index.js",
   "license": "MIT",
   "type": "module",
+  "bin": {
+    "track": "./track.ts"
+  },
   "dependencies": {
     "zod": "^4.0.8"
   },

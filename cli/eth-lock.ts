@@ -1,5 +1,7 @@
 import { z } from 'zod';
 import { ethers } from 'ethers';
+import fs from 'fs';
+import path from 'path';
 
 const argsSchema = z.object({
   rpc: z.string(),
@@ -30,6 +32,18 @@ async function main() {
     txHash: receipt.transactionHash,
     status: receipt.status,
   }, null, 2));
+  const logDir = path.resolve(__dirname, '../examples/swaps');
+  if (!fs.existsSync(logDir)) fs.mkdirSync(logDir, { recursive: true });
+  const logPath = path.join(logDir, `${args.hashlock}.json`);
+  const logData = {
+    intentId: args.hashlock,
+    status: 'locked',
+    ethTx: receipt.transactionHash,
+    amount: args.amount,
+    recipient: args.recipient,
+    timestamp: Date.now(),
+  };
+  fs.writeFileSync(logPath, JSON.stringify(logData, null, 2));
 }
 
 main(); 

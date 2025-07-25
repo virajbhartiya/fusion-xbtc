@@ -5,6 +5,8 @@ import ECPairFactory from 'ecpair';
 import * as tinysecp from 'tiny-secp256k1';
 import { buildHTLCScript } from '../btc-scripts/htlc.js';
 import { getNetwork } from '../btc-scripts/htlc.js';
+import fs from 'fs';
+import path from 'path';
 
 const ECPair = ECPairFactory(tinysecp);
 
@@ -74,6 +76,25 @@ async function main() {
     txid,
     status: 'broadcasted',
   }, null, 2));
+
+  const chain = args.chain as 'bitcoin' | 'litecoin' | 'dogecoin';
+  const logDir = chain === 'dogecoin'
+    ? path.resolve(__dirname, '../examples/doge')
+    : chain === 'litecoin'
+      ? path.resolve(__dirname, '../examples/ltc')
+      : path.resolve(__dirname, '../examples/swaps');
+  const logPath = path.join(logDir, `${args.htlcScript}.json`); // Use htlcScript as unique identifier if hashlock not available
+  let logData = {};
+  if (fs.existsSync(logPath)) {
+    logData = JSON.parse(fs.readFileSync(logPath, 'utf-8'));
+  }
+  Object.assign(logData, {
+    intentId: args.htlcScript,
+    status: 'refunded',
+    btcTx: txid,
+    timestamp: Date.now(),
+  });
+  fs.writeFileSync(logPath, JSON.stringify(logData, null, 2));
 }
 
 main(); 

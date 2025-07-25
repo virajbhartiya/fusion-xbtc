@@ -6,7 +6,6 @@ Incrementally build **Fusion+ Bitcoin-Ethereum Bridge** in tightly scoped, indep
 Each stage:
 - Is self-contained and produces a testable artifact.
 - Avoids speculative code and generalization.
-- Only mocks downstream modules when strictly necessary.
 - Anchors to onchain truth (BTC and ETH testnets).
 
 ---
@@ -35,7 +34,7 @@ Each stage:
 - [x] Write `ETHHTLC.sol` with `lock`, `redeem`, `refund`
 - [x] Support `hashlock`, `timelock`, `recipient`, `sender`
 - [x] Emit events: `Locked`, `Redeemed`, `Refunded`
-- [ ] Deploy to Goerli or Sepolia with simple CLI wrapper
+- [x] Deploy to Goerli or Sepolia with simple CLI wrapper
 
 **Output:** ETH user can lock and redeem funds using secret preimage. Events emitted onchain.
 
@@ -110,10 +109,10 @@ Each stage:
 **Goal:** Ensure funds are recoverable if counterparty is unresponsive.
 
 **Steps:**
-- [ ] Wait until `timelock` expires on ETH side
-- [ ] Trigger `refund()` → ETH returned to sender
-- [ ] On BTC side, broadcast refund tx using timeout path
-- [ ] Assert balances post-refund
+- [x] Wait until `timelock` expires on ETH side
+- [x] Trigger `refund()` → ETH returned to sender
+- [x] On BTC side, broadcast refund tx using timeout path
+- [x] Assert balances post-refund
 
 **Output:** All timeout paths executable. Swaps fail gracefully without loss.
 
@@ -124,10 +123,10 @@ Each stage:
 **Goal:** Wrap all swap paths into ergonomic, verifiable CLI.
 
 **Steps:**
-- [ ] Validate inputs: pubkeys, addresses, network
-- [ ] Add dry-run and confirm prompts
-- [ ] JSON logs of each step in `/examples/swaps/`
-- [ ] Add test mode: `--simulate` → no broadcast, outputs all steps
+- [x] Validate inputs: pubkeys, addresses, network
+- [x] Add dry-run and confirm prompts
+- [x] JSON logs of each step in `/examples/swaps/`
+- [x] Add test mode: `--simulate` → no broadcast, outputs all steps
 
 **Output:** Single CLI can run both swap paths end-to-end with logs.
 
@@ -138,12 +137,12 @@ Each stage:
 **Goal:** Reuse Bitcoin HTLC implementation across similar chains.
 
 **Steps:**
-- [ ] Replace Bitcoin network params with Dogecoin / Litecoin
-- [ ] Adjust fee calculation + tx serialization (different sig versions)
-- [ ] Test:
+- [x] Replace Bitcoin network params with Dogecoin / Litecoin
+- [x] Adjust fee calculation + tx serialization (different sig versions)
+- [x] Test:
   - ETH → LTC
   - ETH → DOGE
-- [ ] Logs stored per-chain under `/examples/doge/`, `/examples/ltc/`
+- [x] Logs stored per-chain under `/examples/doge/`, `/examples/ltc/`
 
 **Output:** Same ETH contract supports multiple UTXO chains via script config.
 
@@ -169,12 +168,12 @@ Each stage:
 **Goal:** Provide visual demo for hackathon/pitch.
 
 **Steps:**
-- [ ] Build single-page React frontend:
+- [x] Build single-page React frontend:
   - Select direction (ETH→BTC or BTC→ETH)
   - Enter amount + recipient
   - Show secret + confirmation
-- [ ] Pull status from both chains (lock status, redemption)
-- [ ] No wallet integration — txs shown as raw data or QR
+- [x] Pull status from both chains (lock status, redemption)
+- [x] No wallet integration — txs shown as raw data or QR
 
 **Output:** Live interface to simulate swaps with visible chain state.
 
@@ -205,7 +204,7 @@ Each stage:
 4. Relayer uses secret to redeem BTC
 5. UI updates in real time
 6. Logs and benchmarks exported
-````
+```
 
 ---
 
