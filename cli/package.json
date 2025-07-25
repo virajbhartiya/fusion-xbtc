@@ -3,7 +3,12 @@
   "version": "0.1.0",
   "main": "index.js",
   "license": "MIT",
+  "type": "module",
   "dependencies": {
     "zod": "^4.0.8"
+  },
+  "devDependencies": {
+    "ts-node": "^10.9.2",
+    "typescript": "^5.8.3"
   }
 }
