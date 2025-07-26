@@ -1,22 +1,22 @@
 {
-  "name": "eth-contracts",
-  "version": "0.1.0",
-  "main": "index.js",
-  "license": "MIT",
+  "name": "fusion-xbtc-eth-contracts",
+  "version": "1.0.0",
+  "description": "Ethereum HTLC contracts for Fusion XBTC",
+  "main": "contracts/ETHHTLC.sol",
   "scripts": {
     "compile": "hardhat compile",
-    "deploy": "hardhat run scripts/deploy.ts --network sepolia"
-  },
-  "devDependencies": {
-    "@nomiclabs/hardhat-ethers": "^2.2.2",
-    "dotenv": "^17.2.1",
-    "ethers": "^5.8.0",
-    "hardhat": "^2.17.0",
-    "ts-node": "^10.9.2",
-    "typescript": "^5.8.3"
+    "test": "hardhat test",
+    "deploy": "hardhat run scripts/deploy.ts --network sepolia",
+    "deploy:local": "hardhat run scripts/deploy.ts --network localhost",
+    "clean": "hardhat clean"
   },
   "dependencies": {
-    "viem": "^2.33.0",
-    "zod": "^4.0.8"
+    "hardhat": "^2.26.1",
+    "@nomiclabs/hardhat-ethers": "^3.0.0",
+    "ethers": "^6.15.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "typescript": "^5.8.3"
   }
 }

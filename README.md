@@ -1,188 +1,191 @@
-# Fusion+ Bitcoin-Ethereum Bridge
+# Fusion XBTC - Trustless Atomic Swaps
 
-## Overview
+A complete implementation of trustless atomic swaps between Ethereum and Bitcoin/Litecoin/Dogecoin/Bitcoin Cash using Hash Time-Locked Contracts (HTLCs).
 
-This project implements a trustless, atomic swap bridge between Ethereum and Bitcoin using Hash Time-Locked Contracts (HTLCs). It enables users to swap ETH for BTC (and vice versa) without custodians or wrapped assets, using onchain contracts and scripts.
+## Features
 
-## Monorepo Structure
+- **100% Trustless**: All swaps enforced by HTLCs on both chains
+- **Multi-Chain Support**: ETH ↔ BTC/LTC/DOGE/BCH
+- **Bidirectional Flows**: ETH→BTC and BTC→ETH swaps
+- **Partial Fills**: Support for order splitting and partial fills
+- **CLI & UI**: Both command-line and web interface
+- **Relayer Service**: Automated cross-chain execution
+- **Production Ready**: Complete with validation, error handling, and logging
 
-- `eth-contracts/` — Ethereum HTLC contract (Solidity)
-- `btc-scripts/` — Bitcoin HTLC script builder, tx builder, parser
-- `cli/` — Command-line interface for swap flows
-- `relayer/` — Offchain relayer for secret propagation
-- `common/` — Shared types
-- `examples/` — Example swap flows and logs
+## Architecture
+
+```
+fusion-xbtc/
+├── cli/                 # Command-line interface
+├── eth-contracts/       # Ethereum HTLC smart contracts
+├── btc-scripts/         # Bitcoin HTLC script utilities
+├── relayer/            # Cross-chain relayer service
+├── frontend/           # Web UI
+├── common/             # Shared types and utilities
+└── examples/           # Example swaps and configurations
+```
 
 ## Quick Start
 
-### 1. Install dependencies
-```sh
+### Prerequisites
+
+- Node.js 18+ and pnpm
+- Bitcoin testnet wallet with funds
+- Ethereum testnet wallet with ETH
+- Electrum server access (testnet)
+
+### Installation
+
+```bash
+# Clone and install dependencies
+git clone https://github.com/virajbhartiya/fusion-xbtc.git
+cd fusion-xbtc
 pnpm install
+
+# Set up environment variables
+cp relayer/env.example relayer/.env
+cp frontend/env.example frontend/.env
+cp eth-contracts/env.example eth-contracts/.env
+
+# Edit the .env files with your configuration
 ```
 
----
+### Configuration
+
+1. **Relayer Configuration** (`relayer/.env`):
+   ```bash
+   ETHEREUM_PRIVATE_KEY=your-eth-private-key
+   BITCOIN_WIF=your-bitcoin-wif
+   BITCOIN_CHANGE_ADDRESS=your-btc-change-address
+   ```
+
+2. **Frontend Configuration** (`frontend/.env`):
+   ```bash
+   VITE_ETH_HTLC_ADDRESS=0x03350065C0eAa7AD4410F72806E29AFDbC64A410
+   VITE_UNISAT_PUBKEY=your-unisat-public-key
+   ```
+
+3. **Contract Deployment** (`eth-contracts/.env`):
+   ```bash
+   SEPOLIA_RPC_URL=https://1rpc.io/sepolia
+   PRIVATE_KEY=your-eth-private-key
+   ```
+
+### Running the System
+
+```bash
+# Start the relayer service
+pnpm relayer
+
+# Start the frontend (in another terminal)
+pnpm frontend
+
+# Use CLI tools
+pnpm cli create-order --orderId=my-order --amount=100000 --minFillAmount=10000 --maxFillAmount=50000 --recipientAddress=tb1q... --refundAddress=tb1q...
+```
 
 ## CLI Commands
 
-All CLI commands are in the `cli/` directory and are run with ts-node:
+### Order Management
+```bash
+# Create a new order
+pnpm cli create-order --orderId=order-001 --amount=100000 --minFillAmount=10000 --maxFillAmount=50000 --recipientAddress=tb1q... --refundAddress=tb1q...
 
-### Generate ETH→BTC Swap Secret
-```sh
-pnpm --filter cli exec ts-node cli/eth2btc.ts --amount=<eth-amount> --recipient=<btc-address-or-pubkey>
-```
-- **Arguments:**
-  - `--amount` (string): ETH amount to lock
-  - `--recipient` (string): BTC address or pubkey
-- **Output:** JSON with `secret`, `hashlock`, `amount`, `recipient`
+# List orders
+pnpm cli list-orders
 
-### Generate BTC→ETH Swap Secret
-```sh
-pnpm --filter cli exec ts-node cli/btc2eth.ts --amount=<btc-amount> --recipient=<eth-address>
-```
-- **Arguments:**
-  - `--amount` (string): BTC amount to lock
-  - `--recipient` (string): ETH address
-- **Output:** JSON with `secret`, `hashlock`, `amount`, `recipient`
-
-### Lock ETH in HTLC
-```sh
-pnpm --filter cli exec ts-node cli/eth-lock.ts --rpc=<eth-rpc> --contract=<htlc-address> --hashlock=<hash> --timelock=<timestamp> --recipient=<eth-address> --amount=<eth-amount> --senderPrivkey=<privkey>
-```
-- **Arguments:**
-  - `--rpc` (string): Ethereum RPC URL
-  - `--contract` (string): HTLC contract address
-  - `--hashlock` (string): 32-byte hash
-  - `--timelock` (string): Unix timestamp (future)
-  - `--recipient` (string): ETH address
-  - `--amount` (string): ETH amount
-  - `--senderPrivkey` (string): Sender's private key
-- **Output:** JSON with `event`, `txHash`, `status`
-
-### Redeem ETH from HTLC
-```sh
-pnpm --filter cli exec ts-node cli/eth-redeem.ts --rpc=<eth-rpc> --contract=<htlc-address> --secret=<preimage> --senderPrivkey=<privkey>
-```
-- **Arguments:**
-  - `--rpc` (string): Ethereum RPC URL
-  - `--contract` (string): HTLC contract address
-  - `--secret` (string): Preimage/secret
-  - `--senderPrivkey` (string): Redeemer's private key
-- **Output:** JSON with `event`, `txHash`, `status`
-
-### Refund ETH from HTLC
-```sh
-pnpm --filter cli exec ts-node cli/eth-refund.ts --rpc=<eth-rpc> --contract=<htlc-address> --hashlock=<hash> --senderPrivkey=<privkey>
-```
-- **Arguments:**
-  - `--rpc` (string): Ethereum RPC URL
-  - `--contract` (string): HTLC contract address
-  - `--hashlock` (string): 32-byte hash
-  - `--senderPrivkey` (string): Sender's private key
-- **Output:** JSON with `event`, `txHash`, `status`
-
-### Lock BTC in HTLC
-```sh
-pnpm --filter cli exec ts-node cli/btc-lock.ts --hashlock=<hash> --recipientPubkey=<hex> --refundPubkey=<hex> --locktime=<block/timestamp> --amount=<sats> --utxos=<json> --changeAddress=<btc-address> --feeSats=<sats> --electrumHost=<host> --electrumPort=<port> [--network=testnet] [--chain=bitcoin]
-```
-- **Arguments:**
-  - `--hashlock` (string): 32-byte hash
-  - `--recipientPubkey` (string): Redeemer's pubkey (hex)
-  - `--refundPubkey` (string): Refunder's pubkey (hex)
-  - `--locktime` (string): Block height or timestamp
-  - `--amount` (string): Amount in sats
-  - `--utxos` (string): JSON array of UTXOs (with WIF)
-  - `--changeAddress` (string): BTC address for change
-  - `--feeSats` (string): Fee in sats
-  - `--electrumHost` (string): ElectrumX host
-  - `--electrumPort` (string): ElectrumX port
-  - `--network` (string, default: testnet)
-  - `--chain` (string, default: bitcoin)
-- **Output:** JSON with `event`, `txid`, `htlcAddress`, `redeemScript`, `status`
-
-### Redeem BTC from HTLC
-```sh
-pnpm --filter cli exec ts-node cli/btc-redeem.ts --hashlock=<hash> --secret=<preimage> --utxoTxid=<txid> --utxoVout=<vout> --utxoAmount=<sats> --redeemPrivkey=<wif> --htlcRecipientPubkey=<hex> --htlcRefundPubkey=<hex> --htlcLocktime=<locktime> --htlcScript=<hex> --destAddress=<btc-address> --feeSats=<sats> --electrumHost=<host> --electrumPort=<port> [--network=testnet] [--chain=bitcoin]
-```
-- **Arguments:**
-  - All required for redeeming from HTLC (see script)
-- **Output:** JSON with `event`, `txid`, `status`
-
-### Refund BTC from HTLC
-```sh
-pnpm --filter cli exec ts-node cli/btc-refund.ts --utxoTxid=<txid> --utxoVout=<vout> --utxoAmount=<sats> --refundPrivkey=<wif> --htlcRecipientPubkey=<hex> --htlcRefundPubkey=<hex> --htlcLocktime=<locktime> --htlcScript=<hex> --destAddress=<btc-address> --feeSats=<sats> --electrumHost=<host> --electrumPort=<port> [--network=testnet] [--chain=bitcoin]
-```
-- **Arguments:**
-  - All required for refunding from HTLC (see script)
-- **Output:** JSON with `event`, `txid`, `status`
-
-### Track Swap Status
-```sh
-pnpm --filter cli exec ts-node cli/track.ts --hashlock=<hash>
-```
-- **Arguments:**
-  - `--hashlock` (string): Swap hashlock
-- **Output:** JSON log for the swap
-
----
-
-## Relayer Usage
-
-### BTC Redeem Automation
-```sh
-pnpm --filter relayer exec ts-node relayer/btc-redeem.ts <args>
-```
-- Automates BTC redeem with secret and logs output
-
-### BTC Watcher
-```sh
-pnpm --filter relayer exec ts-node relayer/btc-watcher.ts --txid=<txid> --vout=<vout> --script=<hex> --electrumHost=<host> --electrumPort=<port> [--network=testnet]
-```
-- Watches for BTC HTLC spends and extracts secrets
-
-### ETH Redeem Watcher
-```sh
-pnpm --filter relayer exec ts-node relayer/eth-redeem-watcher.ts --rpc=<eth-rpc> --contract=<htlc-address> --btcRecipientPubkey=<hex> --btcRefundPubkey=<hex> --btcLocktime=<locktime> --btcUtxos=<json> --btcRedeemAddress=<btc-address> --btcChangeAddress=<btc-address> --btcAmountSats=<sats> --btcFeeSats=<sats> --btcNetwork=<network> --electrumHost=<host> --electrumPort=<port>
-```
-- Listens for ETH HTLC redemption and triggers BTC redeem
-
----
-
-## Ethereum Contract
-
-### Compile
-```sh
-pnpm --filter eth-contracts exec hardhat compile
+# Partial fill
+pnpm cli partial-fill --orderId=order-001 --fillAmount=25000 --recipientPubkey=... --refundPubkey=... --locktime=3600
 ```
 
-### Deploy
-- Use your preferred tool/script (see `eth-contracts/`).
-- Contract: `ETHHTLC.sol`
+### HTLC Operations
+```bash
+# Lock ETH
+pnpm cli eth-lock --rpc=https://1rpc.io/sepolia --contract=0x... --hashlock=0x... --timelock=3600 --recipient=0x... --amount=0.01 --senderPrivkey=0x...
 
-### ABI
-- `lock(bytes32 hashlock, address recipient, uint256 timelock)`
-- `redeem(bytes32 secret)`
-- `refund(bytes32 hashlock)`
+# Lock BTC
+pnpm cli btc-lock --hashlock=0x... --recipientPubkey=... --refundPubkey=... --locktime=3600 --amount=100000 --utxos='[...]' --changeAddress=tb1q... --feeSats=1000 --electrumHost=testnet.hsmiths.com --electrumPort=53011
 
----
+# Redeem ETH
+pnpm cli eth-redeem --rpc=https://1rpc.io/sepolia --contract=0x... --secret=... --senderPrivkey=0x...
 
-## Example Swap Flow
+# Redeem BTC
+pnpm cli btc-redeem --hashlock=0x... --secret=... --utxoTxid=... --utxoVout=0 --utxoAmount=100000 --redeemPrivkey=... --htlcRecipientPubkey=... --htlcRefundPubkey=... --htlcLocktime=3600 --htlcScript=... --destAddress=tb1q... --feeSats=1000 --electrumHost=testnet.hsmiths.com --electrumPort=53011
 
-1. Generate secret/hashlock with `eth2btc.ts` or `btc2eth.ts`.
-2. Lock ETH or BTC using the respective lock command.
-3. Redeem on the opposite chain using the revealed secret.
-4. Use relayer for automation (optional).
-5. Track status with `track.ts`.
+# Refund operations
+pnpm cli eth-refund --rpc=https://1rpc.io/sepolia --contract=0x... --hashlock=0x... --senderPrivkey=0x...
+pnpm cli btc-refund --utxoTxid=... --utxoVout=0 --utxoAmount=100000 --refundPrivkey=... --htlcRecipientPubkey=... --htlcRefundPubkey=... --htlcLocktime=3600 --htlcScript=... --destAddress=tb1q... --feeSats=1000 --electrumHost=testnet.hsmiths.com --electrumPort=53011
 
----
+# Track swap status
+pnpm cli track --hashlock=0x...
+```
+
+## Web Interface
+
+The frontend provides a user-friendly interface for:
+- Connecting wallets (MetaMask, Unisat, Hiro, Xverse)
+- Initiating swaps
+- Monitoring swap status
+- Executing HTLC operations
+
+Access at `http://localhost:5173` after running `pnpm frontend`.
+
+## Relayer Service
+
+The relayer automatically:
+- Monitors both chains for HTLC events
+- Executes cross-chain actions
+- Manages order lifecycle
+- Handles partial fills
+- Provides status updates
+
+Start with `pnpm relayer` after configuring environment variables.
 
 ## Development
-- All code is TypeScript (except Solidity contracts).
-- See `implementation.md` and `spec.md` for full protocol details.
+
+### Project Structure
+- **CLI**: TypeScript-based command-line tools
+- **Contracts**: Solidity HTLC implementation
+- **Scripts**: Bitcoin HTLC script builders and parsers
+- **Relayer**: Node.js service for cross-chain coordination
+- **Frontend**: React + Vite web application
+- **Common**: Shared types and utilities
+
+### Testing
+```bash
+# Run all tests
+pnpm test
+
+# Test specific modules
+pnpm --filter eth-contracts test
+pnpm --filter relayer test
+```
+
+### Building
+```bash
+# Build all modules
+pnpm build
+
+# Build specific modules
+pnpm --filter frontend build
+pnpm --filter cli build
+```
 
 ## Security
-- All user inputs are validated with `zod`.
-- No custodial logic or wrapped assets.
-- Follows atomic swap best practices.
+
+- All inputs validated with Zod schemas
+- Secrets zeroed from memory after use
+- Non-malleable Bitcoin scripts
+- Reentrancy protection in Ethereum contracts
+- No unverified redeemers
+- Comprehensive error handling and logging
 
 ## License
-MIT 
+
+MIT License - see LICENSE file for details.
+
+## Support
+
+- Documentation: [docs.fusion.plus](https://docs.fusion.plus/)
+- Issues: [GitHub Issues](https://github.com/art3mis/fusion-xbtc/issues)
+- Discussions: [GitHub Discussions](https://github.com/art3mis/fusion-xbtc/discussions) 

@@ -1,23 +1,19 @@
 {
-  "name": "fusion-xbtc-relayer",
+  "name": "fusion-xbtc-1inch-fusion",
   "version": "1.0.0",
-  "description": "Relayer service for Fusion XBTC atomic swaps",
+  "description": "1inch Fusion+ integration for Fusion XBTC atomic swaps",
   "main": "index.ts",
   "type": "module",
   "scripts": {
-    "start": "ts-node index.ts",
-    "dev": "ts-node --watch index.ts",
     "build": "tsc",
     "test": "jest",
     "lint": "eslint . --ext .ts",
-    "clean": "rm -rf dist node_modules"
+    "start": "ts-node index.ts",
+    "dev": "ts-node --watch index.ts"
   },
   "dependencies": {
     "ethers": "^6.15.0",
-    "bitcoinjs-lib": "^5.2.0",
-    "ecpair": "^2.1.0",
-    "tiny-secp256k1": "^2.2.4",
-    "electrum-client": "^0.0.6",
+    "axios": "^1.6.0",
     "zod": "^3.22.4",
     "dotenv": "^16.3.1"
   },
@@ -28,4 +24,4 @@
     "jest": "^29.7.0",
     "@types/jest": "^29.5.8"
   }
-}
+} 

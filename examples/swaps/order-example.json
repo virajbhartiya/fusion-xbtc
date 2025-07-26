@@ -1,0 +1,27 @@
+{
+  "orderId": "order-001",
+  "amount": 100000,
+  "remainingAmount": 75000,
+  "minFillAmount": 10000,
+  "maxFillAmount": 50000,
+  "recipientAddress": "tb1q4anyqhfgdpyusnj5zhfge28322aka8vjdztu6z",
+  "refundAddress": "tb1q4anyqhfgdpyusnj5zhfge28322aka8vjdztu6z",
+  "secret": "a1b2c3d4e5f6789012345678901234567890abcdef1234567890abcdef123456",
+  "hashlock": "0x4c57b773ddd36d4e24eaff0d0e0e07e74a52e043bf030a76f4fd139c02e9238e",
+  "locktime": 3600,
+  "network": "testnet",
+  "chain": "bitcoin",
+  "status": "partial",
+  "fills": [
+    {
+      "fillId": "order-001-1703123456789",
+      "amount": 25000,
+      "txid": "0000000000000000000000000000000000000000000000000000000000000000",
+      "timestamp": 1703123456789,
+      "htlcAddress": "tb1q4anyqhfgdpyusnj5zhfge28322aka8vjdztu6z",
+      "redeemScript": "a91469187648b135a4008639fef34ea80feebc91ddb387"
+    }
+  ],
+  "createdAt": 1703123456000,
+  "updatedAt": 1703123456789
+} 

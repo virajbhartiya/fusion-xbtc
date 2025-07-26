@@ -1,17 +1,39 @@
 {
-  "name": "cli",
-  "version": "0.1.0",
-  "main": "index.js",
-  "license": "MIT",
+  "name": "fusion-xbtc-cli",
+  "version": "1.0.0",
+  "description": "CLI tools for Fusion XBTC atomic swaps",
+  "main": "index.ts",
   "type": "module",
-  "bin": {
-    "track": "./track.ts"
+  "scripts": {
+    "start": "ts-node index.ts",
+    "eth2btc": "ts-node eth2btc.ts",
+    "btc2eth": "ts-node btc2eth.ts",
+    "create-order": "ts-node create-order.ts",
+    "list-orders": "ts-node list-orders.ts",
+    "partial-fill": "ts-node partial-fill.ts",
+    "eth-lock": "ts-node eth-lock.ts",
+    "btc-lock": "ts-node btc-lock.ts",
+    "eth-redeem": "ts-node eth-redeem.ts",
+    "btc-redeem": "ts-node btc-redeem.ts",
+    "eth-refund": "ts-node eth-refund.ts",
+    "btc-refund": "ts-node btc-refund.ts",
+    "track": "ts-node track.ts",
+    "build": "tsc",
+    "test": "jest"
   },
   "dependencies": {
-    "zod": "^4.0.8"
+    "zod": "^3.22.4",
+    "ethers": "^6.15.0",
+    "bitcoinjs-lib": "^5.2.0",
+    "ecpair": "^2.1.0",
+    "tiny-secp256k1": "^2.2.4",
+    "electrum-client": "^0.0.6",
+    "fs": "^0.0.1-security",
+    "path": "^0.12.7"
   },
   "devDependencies": {
     "ts-node": "^10.9.2",
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "@types/node": "^20.10.0"
   }
 }
