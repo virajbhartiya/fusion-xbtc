@@ -1,11 +1,12 @@
 // @ts-ignore: Buffer is available in Node.js environments
 import * as bitcoin from 'bitcoinjs-lib';
 
-export function buildHTLCScript({ hashlock, recipientPubkey, refundPubkey, locktime }: {
+export function buildHTLCScript({ hashlock, recipientPubkey, refundPubkey, locktime, network }: {
   hashlock: Buffer;
   recipientPubkey: Buffer;
   refundPubkey: Buffer;
   locktime: number;
+  network: bitcoin.Network;
 }): bitcoin.payments.Payment {
   const script = bitcoin.script.compile([
     bitcoin.opcodes.OP_IF,
@@ -22,7 +23,7 @@ export function buildHTLCScript({ hashlock, recipientPubkey, refundPubkey, lockt
       bitcoin.opcodes.OP_CHECKSIGVERIFY,
     bitcoin.opcodes.OP_ENDIF,
   ]);
-  return bitcoin.payments.p2sh({ redeem: { output: script } });
+  return bitcoin.payments.p2sh({ redeem: { output: script }, network });
 }
 
 export function getNetwork(chain: 'bitcoin' | 'litecoin' | 'dogecoin' | 'bch'): bitcoin.Network {

@@ -226,19 +226,15 @@ export default function App() {
     setUtxoTxStatus('Preparing transaction...');
     try {
       if (!utxoWallet || !utxoAddress) throw new Error('No wallet connected');
-      // 1. Get network
-      const network = bitcoin.networks.testnet; // or use getNetwork(chain)
-      // 2. Fetch UTXOs
+      const network = bitcoin.networks.testnet;
       const utxos = await fetchUtxos(utxoAddress, network);
       if (!utxos.length) throw new Error('No UTXOs found for address');
-      // 3. Build HTLC script
-      // Use Unisat public key from environment variable for both recipient and refund pubkeys
-      // Set VITE_UNISAT_PUBKEY in your .env file (hex string, 33 bytes compressed pubkey)
       const unisatPubkeyHex = import.meta.env.VITE_UNISAT_PUBKEY;
       if (!unisatPubkeyHex) throw new Error('VITE_UNISAT_PUBKEY env variable not set');
-      const recipientPubkey = (window.Buffer || Buffer).from(unisatPubkeyHex, 'hex');
-      const refundPubkey = (window.Buffer || Buffer).from(unisatPubkeyHex, 'hex');
-      const hashlockBuf = (window.Buffer || Buffer).from(hashlock, 'hex');
+      const { Buffer } = await import('buffer');
+      const recipientPubkey = Buffer.from(unisatPubkeyHex, 'hex');
+      const refundPubkey = Buffer.from(unisatPubkeyHex, 'hex');
+      const hashlockBuf = Buffer.from(hashlock, 'hex');
       const locktimeNum = parseInt(timelock, 10);
       const htlc = bitcoin.payments.p2sh({
         redeem: { output: bitcoin.script.compile([
@@ -258,9 +254,8 @@ export default function App() {
         ]) }
       });
       if (!htlc.address) throw new Error('Failed to build HTLC address');
-      // 4. Build PSBT
       const amountSats = Math.floor(Number(amount) * 1e8);
-      const feeSats = 500; // TODO: Make configurable
+      const feeSats = 500;
       const psbt = new bitcoin.Psbt({ network });
       let inputSum = 0;
       utxos.forEach(utxo => {
@@ -276,7 +271,6 @@ export default function App() {
       if (change > 0) {
         psbt.addOutput({ address: changeAddress, value: change });
       }
-      // 5. Serialize PSBT and sign with Unisat
       const psbtHex = psbt.toHex();
       const unisat = (window as unknown as { unisat?: { signPsbt: (psbtHex: string) => Promise<string>; pushPsbt: (signedPsbtHex: string) => Promise<string> } }).unisat;
       if (!unisat) throw new Error('Unisat wallet not found');

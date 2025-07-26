@@ -1,6 +1,6 @@
 {
 	"devDependencies": {
-		"bitcoinjs-lib": "^6.1.7",
+		"bitcoinjs-lib": "^5.2.0",
 		"bitcore-lib": "^10.10.7",
 		"electrum-client": "^0.0.6",
 		"eslint": "^9.31.0",
@@ -15,8 +15,10 @@
 	"dependencies": {
 		"@esbuild-plugins/node-globals-polyfill": "^0.2.3",
 		"@esbuild-plugins/node-modules-polyfill": "^0.2.2",
+		"bs58": "^6.0.0",
+		"bs58check": "^4.0.0",
 		"buffer": "^6.0.3",
-		"ecpair": "^3.0.0",
+		"ecpair": "^2.1.0",
 		"tiny-secp256k1": "^2.2.4"
 	}
 }

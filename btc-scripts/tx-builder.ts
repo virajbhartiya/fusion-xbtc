@@ -19,7 +19,7 @@ export function buildLockTx({
   let inputSum = 0;
   for (const utxo of utxos) {
     psbt.addInput({
-      hash: utxo.txid,
+      hash: Buffer.from(utxo.txid, 'hex').reverse(),
       index: utxo.vout,
       witnessUtxo: { script: bitcoin.address.toOutputScript(changeAddress, network), value: utxo.value },
     });
@@ -31,6 +31,7 @@ export function buildLockTx({
     psbt.addOutput({ address: changeAddress, value: change });
   }
   utxos.forEach((utxo, i) => {
+    // Use the ECPair directly but ensure it's properly configured
     psbt.signInput(i, utxo.keyPair);
   });
   return psbt;

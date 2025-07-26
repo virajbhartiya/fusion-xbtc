@@ -1,12 +1,17 @@
 import { z } from 'zod';
 import * as bitcoin from 'bitcoinjs-lib';
-import { buildHTLCScript, getNetwork } from '../btc-scripts/htlc.js';
+import { buildHTLCScript, getNetwork } from '../btc-scripts/htlc.ts';
 import ElectrumClient from 'electrum-client';
-import { buildLockTx } from '../btc-scripts/tx-builder.js';
-import ECPairFactory from 'ecpair';
+import { buildLockTx } from '../btc-scripts/tx-builder.ts';
+import { ECPairFactory } from 'ecpair';
 import * as tinysecp from 'tiny-secp256k1';
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 const ECPair = ECPairFactory(tinysecp);
 
@@ -25,12 +30,14 @@ const args = argsSchema.parse(Object.fromEntries(process.argv.slice(2).map(arg =
   return [k, v];
 })));
 
-const network = getNetwork(args.chain as 'bitcoin' | 'litecoin' | 'dogecoin' | 'bch');
+const network = args.network === 'testnet' 
+  ? bitcoin.networks.testnet 
+  : getNetwork(args.chain as 'bitcoin' | 'litecoin' | 'dogecoin' | 'bch');
 const hashlock = Buffer.from(args.hashlock.replace(/^0x/, ''), 'hex');
 const recipientPubkey = Buffer.from(args.recipientPubkey, 'hex');
 const refundPubkey = Buffer.from(args.refundPubkey, 'hex');
 const locktime = parseInt(args.locktime, 10);
-const htlc = buildHTLCScript({ hashlock, recipientPubkey, refundPubkey, locktime });
+const htlc = buildHTLCScript({ hashlock, recipientPubkey, refundPubkey, locktime, network });
 
 const extendedArgsSchema = argsSchema.extend({
   utxos: z.string(), // JSON stringified array of UTXOs
@@ -47,10 +54,15 @@ const fullArgs = extendedArgsSchema.parse(Object.fromEntries(process.argv.slice(
 })));
 
 async function main() {
+  console.log('Starting BTC lock transaction...');
   const utxos = JSON.parse(fullArgs.utxos).map((u: any) => ({
-    ...u,
+    txid: u.txid,
+    vout: u.vout,
+    value: u.amount,
     keyPair: ECPair.fromWIF(u.wif, network)
   }));
+  console.log('UTXOs processed:', utxos.length);
+  
   const psbt = buildLockTx({
     utxos,
     htlcAddress: htlc.address!,
@@ -59,16 +71,32 @@ async function main() {
     feeSats: parseInt(fullArgs.feeSats, 10),
     network
   });
+  console.log('PSBT built successfully');
+  
   psbt.finalizeAllInputs();
   const txHex = psbt.extractTransaction().toHex();
-  const client = new ElectrumClient(
-    parseInt(fullArgs.electrumPort, 10),
-    fullArgs.electrumHost,
-    fullArgs.electrumProto
-  );
-  await client.connect();
-  const txid = await client.blockchain_transaction_broadcast(txHex);
-  await client.close();
+  console.log('Transaction hex generated:', txHex.substring(0, 100) + '...');
+  console.log('Full transaction hex:', txHex);
+  
+  let txid: string;
+  try {
+    const client = new ElectrumClient(
+      parseInt(fullArgs.electrumPort, 10),
+      fullArgs.electrumHost,
+      fullArgs.electrumProto
+    );
+    console.log('Connecting to Electrum server...');
+    await (client as any).connect();
+    console.log('Broadcasting transaction...');
+    txid = await client.blockchainTransaction_broadcast(txHex);
+    await (client as any).close();
+    console.log('Transaction broadcasted successfully:', txid);
+  } catch (error) {
+    console.log('Failed to broadcast transaction via Electrum server:', error.message);
+    console.log('You can manually broadcast the transaction hex above using a Bitcoin testnet explorer or wallet.');
+    console.log('Transaction hex for manual broadcast:', txHex);
+    process.exit(1);
+  }
   const chain = args.chain as 'bitcoin' | 'litecoin' | 'dogecoin' | 'bch';
   const logDir = chain === 'dogecoin'
     ? path.resolve(__dirname, '../examples/doge')

@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "main": "index.js",
   "license": "MIT",
+  "type": "module",
   "dependencies": {
     "bitcoinjs-lib": "^6.1.7",
     "bitcore-lib": "^10.10.7",
