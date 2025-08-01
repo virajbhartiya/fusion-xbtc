@@ -5,6 +5,10 @@ import viteLogo from '/vite.svg';
 import type { Eip1193Provider } from 'ethers';
 import * as bitcoin from 'bitcoinjs-lib';
 
+// Fusion+ integration will be added via API calls
+const FUSION_API_BASE_URL = import.meta.env.VITE_FUSION_API_BASE_URL || 'https://fusion.1inch.io';
+const FUSION_API_KEY = import.meta.env.VITE_FUSION_API_KEY;
+
 async function ensureBuffer() {
   if (typeof window !== 'undefined' && !(window as Window & { Buffer?: typeof import('buffer').Buffer }).Buffer) {
     const bufferModule = await import('buffer');
@@ -31,6 +35,24 @@ const ETHHTLC_ABI = [
   'event Locked(bytes32 indexed hashlock, address indexed sender, address indexed recipient, uint256 amount, uint256 timelock)',
   'event Redeemed(bytes32 indexed hashlock, bytes32 secret, address indexed recipient)',
   'event Refunded(bytes32 indexed hashlock, address indexed sender)'
+];
+
+const FUSION_HTLC_ABI = [
+  // Standard HTLC functions
+  'function lock(bytes32 hashlock, address recipient, uint256 timelock) external payable',
+  'function redeem(bytes32 secret) external',
+  'function refund(bytes32 hashlock) external',
+  // Fusion+ specific functions
+  'function createFusionOrder(bytes32 orderId, string makerAsset, string takerAsset, uint256 makerAmount, uint256 takerAmount, uint256 timelock, bytes32 hashlock) external payable',
+  'function matchFusionOrder(bytes32 orderId, bytes32 secret) external payable',
+  'function cancelFusionOrder(bytes32 orderId) external',
+  'function getFusionOrder(bytes32 orderId) external view returns (bytes32, address, string, string, uint256, uint256, uint256, bytes32, bool, bool, uint256)',
+  'function isOrderActive(bytes32 orderId) external view returns (bool)',
+  'function getActiveOrderIds() external view returns (bytes32[])',
+  // Events
+  'event FusionOrderCreated(bytes32 indexed orderId, bytes32 indexed hashlock, address indexed maker, string makerAsset, string takerAsset, uint256 makerAmount, uint256 takerAmount, uint256 timelock)',
+  'event FusionOrderMatched(bytes32 indexed orderId, bytes32 indexed hashlock, address indexed taker, uint256 executedAmount)',
+  'event FusionOrderCancelled(bytes32 indexed orderId, bytes32 indexed hashlock, address indexed maker)'
 ];
 
 function explorerLink(chain: string, tx: string) {
@@ -103,6 +125,16 @@ export default function App() {
   const [utxoWalletError, setUtxoWalletError] = useState<string>('');
   const [utxoTxStatus, setUtxoTxStatus] = useState<string>('');
   const [utxoTxId, setUtxoTxId] = useState<string>('');
+  
+  // Fusion+ state
+  const [useFusion, setUseFusion] = useState<boolean>(false);
+  const [fusionOrderId, setFusionOrderId] = useState<string>('');
+  const [fusionStatus, setFusionStatus] = useState<string>('');
+  const [fusionContract, setFusionContract] = useState<string>(import.meta.env.VITE_FUSION_HTLC_ADDRESS || '');
+  const [availableOrders, setAvailableOrders] = useState<any[]>([]);
+  const [selectedOrder, setSelectedOrder] = useState<any>(null);
+  const [showOrderList, setShowOrderList] = useState<boolean>(false);
+  const [selectionMessage, setSelectionMessage] = useState<string>('');
 
   useEffect(() => { ensureBuffer(); }, []);
 
@@ -181,6 +213,88 @@ export default function App() {
       setTxStatus('Waiting for confirmation...');
       await tx.wait();
       setTxStatus('ETH locked!');
+    } catch (e: unknown) {
+      setTxStatus('Error: ' + ((e as Error).message || ''));
+    }
+  }
+
+  // Fusion+ contract functions
+  async function createFusionOrderOnChain() {
+    const eth = (window as unknown as { ethereum?: unknown }).ethereum as Eip1193Provider | undefined;
+    if (!eth || !ethAddress || !fusionContract) return;
+    setTxStatus('Creating Fusion+ order on chain...');
+    try {
+      const provider = new ethers.BrowserProvider(eth);
+      const signer = await provider.getSigner();
+      const contract = new ethers.Contract(fusionContract, FUSION_HTLC_ABI, signer);
+      
+      const orderId = ethers.keccak256(ethers.toUtf8Bytes(`fusion-${Date.now()}-${Math.random()}`));
+      const makerAsset = direction === 'eth2btc' ? 'ETH' : 'BTC';
+      const takerAsset = direction === 'eth2btc' ? 'BTC' : 'ETH';
+      const makerAmount = ethers.parseEther(amount);
+      const takerAmount = ethers.parseEther(amount); // Simplified for demo
+      const timelockValue = BigInt(Math.floor(Date.now()/1000) + parseInt(timelock));
+      const hashlockBytes = ethers.keccak256(ethers.toUtf8Bytes(hashlock));
+      
+      const tx = await contract.createFusionOrder(
+        orderId,
+        makerAsset,
+        takerAsset,
+        makerAmount,
+        takerAmount,
+        timelockValue,
+        hashlockBytes,
+        { value: makerAmount }
+      );
+      
+      setTxHash(tx.hash);
+      setTxStatus('Waiting for confirmation...');
+      await tx.wait();
+      setTxStatus('Fusion+ order created on chain!');
+      setFusionOrderId(orderId);
+    } catch (e: unknown) {
+      setTxStatus('Error: ' + ((e as Error).message || ''));
+    }
+  }
+
+  async function matchFusionOrderOnChain() {
+    const eth = (window as unknown as { ethereum?: unknown }).ethereum as Eip1193Provider | undefined;
+    if (!eth || !ethAddress || !fusionContract || !fusionOrderId || !secret) return;
+    setTxStatus('Matching Fusion+ order on chain...');
+    try {
+      const provider = new ethers.BrowserProvider(eth);
+      const signer = await provider.getSigner();
+      const contract = new ethers.Contract(fusionContract, FUSION_HTLC_ABI, signer);
+      
+      const secretBytes = ethers.keccak256(ethers.toUtf8Bytes(secret));
+      const value = ethers.parseEther(amount);
+      
+      const tx = await contract.matchFusionOrder(fusionOrderId, secretBytes, { value });
+      
+      setTxHash(tx.hash);
+      setTxStatus('Waiting for confirmation...');
+      await tx.wait();
+      setTxStatus('Fusion+ order matched on chain!');
+    } catch (e: unknown) {
+      setTxStatus('Error: ' + ((e as Error).message || ''));
+    }
+  }
+
+  async function cancelFusionOrderOnChain() {
+    const eth = (window as unknown as { ethereum?: unknown }).ethereum as Eip1193Provider | undefined;
+    if (!eth || !ethAddress || !fusionContract || !fusionOrderId) return;
+    setTxStatus('Cancelling Fusion+ order on chain...');
+    try {
+      const provider = new ethers.BrowserProvider(eth);
+      const signer = await provider.getSigner();
+      const contract = new ethers.Contract(fusionContract, FUSION_HTLC_ABI, signer);
+      
+      const tx = await contract.cancelFusionOrder(fusionOrderId);
+      
+      setTxHash(tx.hash);
+      setTxStatus('Waiting for confirmation...');
+      await tx.wait();
+      setTxStatus('Fusion+ order cancelled on chain!');
     } catch (e: unknown) {
       setTxStatus('Error: ' + ((e as Error).message || ''));
     }
@@ -291,6 +405,128 @@ export default function App() {
     }
   }
 
+  // Fusion+ functions
+  async function createFusionOrder() {
+    if (!FUSION_API_KEY) {
+      setFusionStatus('Error: Fusion+ API key not configured');
+      return;
+    }
+
+    setFusionStatus('Creating Fusion+ order...');
+    try {
+      const response = await fetch('/api/fusion', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'create-order',
+          direction,
+          ethAmount: amount,
+          btcAmount: amount, // Simplified for demo
+          ethAddress: ethAddress || recipient,
+          btcAddress: recipient,
+          timelock: parseInt(timelock) + Math.floor(Date.now() / 1000)
+        })
+      });
+
+      if (!response.ok) throw new Error('Failed to create Fusion+ order');
+      
+      const order = await response.json();
+      setFusionOrderId(order.orderId);
+      setFusionStatus('Fusion+ order created successfully!');
+    } catch (error) {
+      setFusionStatus(`Error: ${(error as Error).message}`);
+    }
+  }
+
+  async function getFusionOrderStatus() {
+    if (!fusionOrderId) return;
+    
+    try {
+      const response = await fetch('/api/fusion', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'get-order',
+          orderId: fusionOrderId
+        })
+      });
+
+      if (!response.ok) throw new Error('Failed to get order status');
+      
+      const order = await response.json();
+      setFusionStatus(`Order status: ${order.status}`);
+    } catch (error) {
+      setFusionStatus(`Error: ${(error as Error).message}`);
+    }
+  }
+
+  // Cross-chain coordination functions
+  async function loadAvailableOrders() {
+    try {
+      console.log('Loading available orders...');
+      const response = await fetch('/api/orders?action=list');
+      if (!response.ok) throw new Error('Failed to load orders');
+      
+      const orders = await response.json();
+      console.log('Orders loaded:', orders);
+      setAvailableOrders(orders);
+      setShowOrderList(true);
+      console.log('Order list should now be visible');
+    } catch (error) {
+      console.error('Error loading orders:', error);
+    }
+  }
+
+  async function selectOrder(orderId: string) {
+    try {
+      console.log('Selecting order:', orderId);
+      const response = await fetch(`/api/orders/${orderId}`);
+      if (!response.ok) throw new Error('Failed to get order details');
+      
+      const order = await response.json();
+      console.log('Order selected:', order);
+      setSelectedOrder(order);
+      setFusionOrderId(order.orderId);
+      setFusionStatus(`Selected order: ${order.status}`);
+      setSelectionMessage(`✅ Order ${order.orderId} selected successfully!`);
+      console.log('Order selection complete - fusionOrderId:', order.orderId, 'fusionStatus:', `Selected order: ${order.status}`);
+      
+      // Clear the success message after 3 seconds
+      setTimeout(() => setSelectionMessage(''), 3000);
+    } catch (error) {
+      console.error('Error selecting order:', error);
+    }
+  }
+
+  async function matchSelectedOrder() {
+    if (!selectedOrder || !secret) {
+      console.log('Cannot match order - missing selectedOrder or secret:', { selectedOrder: !!selectedOrder, secret: !!secret });
+      return;
+    }
+    
+    try {
+      console.log('Matching order:', selectedOrder.orderId, 'with secret:', secret);
+      const response = await fetch('/api/fusion', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'execute-order',
+          orderId: selectedOrder.orderId,
+          secret: secret
+        })
+      });
+
+      if (!response.ok) throw new Error('Failed to match order');
+      
+      const result = await response.json();
+      console.log('Order match result:', result);
+      setFusionStatus(`Order matched: ${result.success ? 'Success' : 'Failed'}`);
+    } catch (error) {
+      console.error('Error matching order:', error);
+      setFusionStatus(`Error: ${(error as Error).message}`);
+    }
+  }
+
   useEffect(() => {
     if (!hashlock) return;
     const interval = setInterval(() => {
@@ -393,7 +629,14 @@ export default function App() {
             {utxoWalletError && <div style={{color:'#b91c1c',fontWeight:700}}>{utxoWalletError}</div>}
           </div>
         )}
-        <form className="swap-form" onSubmit={e => { e.preventDefault(); handleStart(); }}>
+        <form className="swap-form" onSubmit={e => { 
+          e.preventDefault(); 
+          if (useFusion) {
+            createFusionOrder();
+          } else {
+            handleStart();
+          }
+        }}>
           <label>
             Swap Direction
             <select value={direction} onChange={e => setDirection(e.target.value)}>
@@ -438,8 +681,118 @@ export default function App() {
             Timelock (seconds from now)
             <input type="number" value={timelock} onChange={e => setTimelock(e.target.value)} placeholder="3600" />
           </label>
-          <button type="submit" disabled={!amount || !recipient || !timelock || (direction==='eth2btc' && !ethAddress) || (direction==='btc2eth' && !utxoAddress)}>Start Swap</button>
+          
+          {/* Fusion+ Integration Toggle */}
+          <label style={{display: 'flex', alignItems: 'center', gap: '0.5em', marginTop: '1em'}}>
+            <input 
+              type="checkbox" 
+              checked={useFusion} 
+              onChange={e => setUseFusion(e.target.checked)}
+              style={{width: 'auto', margin: 0}}
+            />
+            <span>Use Fusion+ Protocol (1inch Integration)</span>
+          </label>
+          
+          {useFusion && (
+            <div style={{background: '#fffbe6', border: '2px solid #ff0055', borderRadius: '8px', padding: '1rem', marginTop: '1rem'}}>
+              <h4 style={{margin: '0 0 0.5rem 0', color: '#ff0055'}}>Fusion+ Configuration</h4>
+              <label>
+                Fusion+ HTLC Contract Address
+                <input 
+                  type="text" 
+                  value={fusionContract} 
+                  onChange={e => setFusionContract(e.target.value)} 
+                  placeholder="0x..." 
+                />
+              </label>
+              <div style={{marginTop: '1rem'}}>
+                <button 
+                  type="button" 
+                  onClick={loadAvailableOrders}
+                  style={{background: '#ff0055', color: '#fff', border: 'none', padding: '0.5rem 1rem', borderRadius: '4px', cursor: 'pointer'}}
+                >
+                  Browse Available Orders
+                </button>
+              </div>
+              <div style={{marginTop: '0.5rem', fontSize: '0.9em', color: '#666'}}>
+                Fusion+ enables order matching and partial fills for cross-chain swaps
+              </div>
+            </div>
+          )}
+          
+          <button type="submit" disabled={!amount || !recipient || !timelock || (direction==='eth2btc' && !ethAddress) || (direction==='btc2eth' && !utxoAddress)}>
+            {useFusion ? 'Create Fusion+ Order' : 'Start Swap'}
+          </button>
         </form>
+        
+        {/* Available Orders Display - Always visible when orders are loaded */}
+        {console.log('Rendering check - showOrderList:', showOrderList, 'availableOrders.length:', availableOrders.length)}
+        {showOrderList && availableOrders.length > 0 && (
+          <div style={{marginTop:24, background: '#fffbe6', border: '2px solid #ff0055', borderRadius: '8px', padding: '1rem'}}>
+            <h4 style={{margin: '0 0 0.5rem 0', color: '#ff0055'}}>Available Fusion+ Orders</h4>
+            <div style={{maxHeight: '300px', overflowY: 'auto'}}>
+              {availableOrders.map((order, index) => (
+                <div key={index} style={{border: '1px solid #ddd', padding: '0.5rem', margin: '0.5rem 0', borderRadius: '4px', background: '#fff'}}>
+                  <div><b>Order ID:</b> <code>{order.orderId}</code></div>
+                  <div><b>Direction:</b> {order.direction}</div>
+                  <div><b>Amount:</b> {order.ethAmount} ETH ↔ {order.btcAmount} BTC</div>
+                  <div><b>Status:</b> {order.status}</div>
+                  <button 
+                    onClick={() => selectOrder(order.orderId)}
+                    style={{background: '#ff0055', color: '#fff', border: 'none', padding: '0.25rem 0.5rem', borderRadius: '4px', cursor: 'pointer', marginTop: '0.5rem'}}
+                  >
+                    Select Order
+                  </button>
+                </div>
+              ))}
+            </div>
+            <button 
+              onClick={() => setShowOrderList(false)}
+              style={{background: '#666', color: '#fff', border: 'none', padding: '0.5rem 1rem', borderRadius: '4px', cursor: 'pointer', marginTop: '1rem'}}
+            >
+              Close
+            </button>
+          </div>
+        )}
+
+        {/* Success Message */}
+        {selectionMessage && (
+          <div style={{marginTop:24, background: '#d4edda', border: '2px solid #28a745', borderRadius: '8px', padding: '1rem', color: '#155724'}}>
+            {selectionMessage}
+          </div>
+        )}
+
+        {/* Selected Order Display - Always visible when an order is selected */}
+        {selectedOrder && (
+          <div style={{marginTop:24, background: '#e6f3ff', border: '2px solid #0066cc', borderRadius: '8px', padding: '1rem'}}>
+            <h4 style={{margin: '0 0 0.5rem 0', color: '#0066cc'}}>Selected Order</h4>
+            <div><b>Order ID:</b> <code>{selectedOrder.orderId}</code></div>
+            <div><b>Direction:</b> {selectedOrder.direction}</div>
+            <div><b>Amount:</b> {selectedOrder.ethAmount} ETH ↔ {selectedOrder.btcAmount} BTC</div>
+            <div><b>Status:</b> {selectedOrder.status}</div>
+            <div><b>ETH Address:</b> <code>{selectedOrder.ethAddress}</code></div>
+            <div><b>BTC Address:</b> <code>{selectedOrder.btcAddress}</code></div>
+            <div style={{marginTop: '1rem'}}>
+              <button 
+                onClick={() => matchSelectedOrder()}
+                style={{background: '#0066cc', color: '#fff', border: 'none', padding: '0.5rem 1rem', borderRadius: '4px', cursor: 'pointer', marginRight: '0.5rem'}}
+              >
+                Match This Order
+              </button>
+              <button 
+                onClick={() => {
+                  setSelectedOrder(null);
+                  setFusionOrderId('');
+                  setFusionStatus('');
+                }}
+                style={{background: '#666', color: '#fff', border: 'none', padding: '0.5rem 1rem', borderRadius: '4px', cursor: 'pointer'}}
+              >
+                Clear Selection
+              </button>
+            </div>
+          </div>
+        )}
+
         {step > 0 && (
           <div className="swap-status">
             <h3>Swap Secret & Hashlock</h3>
@@ -473,7 +826,26 @@ export default function App() {
                 )}
               </div>
             )}
-            {direction === 'eth2btc' && ethContract && ethAddress && (
+
+            {useFusion && fusionOrderId && (
+              <div style={{marginTop:24, background: '#fffbe6', border: '2px solid #ff0055', borderRadius: '8px', padding: '1rem'}}>
+                <h4 style={{margin: '0 0 0.5rem 0', color: '#ff0055'}}>Fusion+ Order</h4>
+                <div><b>Order ID:</b> <code>{fusionOrderId}</code></div>
+                <div><b>Status:</b> {fusionStatus}</div>
+                <div style={{marginTop: '1rem'}}>
+                  <button style={{marginRight: '0.5rem'}} onClick={getFusionOrderStatus}>Check Status</button>
+                  <button style={{marginRight: '0.5rem'}} onClick={createFusionOrderOnChain}>Create on Chain</button>
+                  <button style={{marginRight: '0.5rem'}} onClick={matchFusionOrderOnChain}>Match Order</button>
+                  <button style={{marginRight: '0.5rem'}} onClick={matchSelectedOrder}>Match Selected</button>
+                  <button onClick={cancelFusionOrderOnChain}>Cancel Order</button>
+                </div>
+                <div style={{marginTop: '0.5rem', fontSize: '0.9em', color: '#666'}}>
+                  This order is now available for matching on the Fusion+ network
+                </div>
+              </div>
+            )}
+            
+            {direction === 'eth2btc' && ethContract && ethAddress && !useFusion && (
               <div style={{marginTop:24}}>
                 <button style={{marginRight:12}} onClick={lockEth}>Lock ETH</button>
                 <button style={{marginRight:12}} onClick={redeemEth}>Redeem</button>

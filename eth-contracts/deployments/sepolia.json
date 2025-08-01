@@ -1,0 +1,16 @@
+{
+  "network": "sepolia",
+  "deployer": "0x01b7b2bC30c958bA3bC0852bF1BD4efB165281Ba",
+  "contracts": {
+    "FusionHTLC": {
+      "address": "0x68DB525d7A0A69C43046240AB093aBf883735914",
+      "constructorArgs": [],
+      "deployedAt": "2025-07-27T11:20:01.848Z",
+      "blockNumber": 8853342
+    }
+  },
+  "deploymentInfo": {
+    "timestamp": 1753615201914,
+    "gasUsed": "1658939"
+  }
+}

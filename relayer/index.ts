@@ -1,14 +1,17 @@
 #!/usr/bin/env ts-node
 
-import { config } from 'dotenv';
+import { config as dotenvConfig } from 'dotenv';
 import { BitcoinRelayer } from './bitcoin-relayer';
 import { EthereumRelayer } from './ethereum-relayer';
 import { OrderManager } from './order-manager';
 import { Logger } from './logger';
 import { EventProcessor } from './event-processor';
+import { getConfig } from './config';
+import path from 'path';
 
-// Load environment variables
-config();
+// Load environment variables from absolute path
+dotenvConfig({ path: path.resolve(__dirname, '../.env') });
+console.log('DEBUG ENV KEY:', process.env.ETHEREUM_PRIVATE_KEY);
 
 const logger = new Logger('Relayer');
 
@@ -163,31 +166,8 @@ class Relayer {
 
 // Main execution
 async function main() {
-  const config: RelayerConfig = {
-    bitcoin: {
-      network: (process.env.BITCOIN_NETWORK as 'mainnet' | 'testnet') || 'testnet',
-      electrumHost: process.env.BITCOIN_ELECTRUM_HOST || 'testnet.hsmiths.com',
-      electrumPort: parseInt(process.env.BITCOIN_ELECTRUM_PORT || '53011'),
-      electrumProto: (process.env.BITCOIN_ELECTRUM_PROTO as 'ssl' | 'tcp') || 'ssl',
-      pollInterval: parseInt(process.env.BITCOIN_POLL_INTERVAL || '30000'),
-    },
-    ethereum: {
-      network: (process.env.ETHEREUM_NETWORK as 'mainnet' | 'sepolia' | 'goerli') || 'sepolia',
-      rpcUrl: process.env.ETHEREUM_RPC_URL || 'https://1rpc.io/sepolia',
-      contractAddress: process.env.ETHEREUM_CONTRACT_ADDRESS || '0x03350065C0eAa7AD4410F72806E29AFDbC64A410',
-      pollInterval: parseInt(process.env.ETHEREUM_POLL_INTERVAL || '15000'),
-      privateKey: process.env.ETHEREUM_PRIVATE_KEY || '',
-    },
-    orders: {
-      dataDir: process.env.ORDERS_DATA_DIR || './examples/swaps',
-      backupInterval: parseInt(process.env.ORDERS_BACKUP_INTERVAL || '300000'),
-    },
-    relayer: {
-      secretKey: process.env.RELAYER_SECRET_KEY || 'default-secret-key',
-      maxRetries: parseInt(process.env.RELAYER_MAX_RETRIES || '3'),
-      retryDelay: parseInt(process.env.RELAYER_RETRY_DELAY || '5000'),
-    },
-  };
+  const config = getConfig('development');
+  console.log('DEBUG CONFIG KEY:', config.ethereum.privateKey);
 
   // Validate required configuration
   if (!config.ethereum.privateKey) {

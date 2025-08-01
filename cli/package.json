@@ -1,5 +1,5 @@
 {
-  "name": "fusion-xbtc-cli",
+  "name": "cli",
   "version": "1.0.0",
   "description": "CLI tools for Fusion XBTC atomic swaps",
   "main": "index.ts",
@@ -11,6 +11,7 @@
     "create-order": "ts-node create-order.ts",
     "list-orders": "ts-node list-orders.ts",
     "partial-fill": "ts-node partial-fill.ts",
+    "fusion-swap": "ts-node fusion-swap.ts",
     "eth-lock": "ts-node eth-lock.ts",
     "btc-lock": "ts-node btc-lock.ts",
     "eth-redeem": "ts-node eth-redeem.ts",

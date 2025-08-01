@@ -36,6 +36,44 @@
       "artifacts": [
         "ETHHTLC"
       ]
+    },
+    "/Users/art3mis/Developer/fusion-xbtc/eth-contracts/contracts/FusionHTLC.sol": {
+      "lastModificationDate": 1753614603335,
+      "contentHash": "c9f1ae9bfeae7b37ad6f1087ebf07217",
+      "sourceName": "contracts/FusionHTLC.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [
+        "./ETHHTLC.sol"
+      ],
+      "versionPragmas": [
+        "^0.8.0"
+      ],
+      "artifacts": [
+        "FusionHTLC"
+      ]
     }
   }
 }

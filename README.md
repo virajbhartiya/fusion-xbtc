@@ -1,12 +1,14 @@
-# Fusion XBTC - Trustless Atomic Swaps
+# Fusion XBTC - Trustless Atomic Swaps with Fusion+ Integration
 
-A complete implementation of trustless atomic swaps between Ethereum and Bitcoin/Litecoin/Dogecoin/Bitcoin Cash using Hash Time-Locked Contracts (HTLCs).
+A complete implementation of trustless atomic swaps between Ethereum and Bitcoin/Litecoin/Dogecoin/Bitcoin Cash using Hash Time-Locked Contracts (HTLCs), now extended with **1inch Fusion+ protocol integration**.
 
 ## Features
 
 - **100% Trustless**: All swaps enforced by HTLCs on both chains
+- **Fusion+ Integration**: Seamless integration with 1inch Fusion+ protocol
 - **Multi-Chain Support**: ETH ↔ BTC/LTC/DOGE/BCH
 - **Bidirectional Flows**: ETH→BTC and BTC→ETH swaps
+- **Fusion+ Order Matching**: Orders can be matched and executed through Fusion+
 - **Partial Fills**: Support for order splitting and partial fills
 - **CLI & UI**: Both command-line and web interface
 - **Relayer Service**: Automated cross-chain execution
@@ -22,8 +24,30 @@ fusion-xbtc/
 ├── relayer/            # Cross-chain relayer service
 ├── frontend/           # Web UI
 ├── common/             # Shared types and utilities
+├── 1inch-fusion/      # Fusion+ integration module
 └── examples/           # Example swaps and configurations
 ```
+
+## Fusion+ Integration
+
+The project now includes seamless integration with 1inch's Fusion+ protocol:
+
+- **FusionHTLC Contract**: Extends ETHHTLC with Fusion+ order management
+- **Fusion+ API Integration**: Direct integration with 1inch Fusion+ API
+- **Cross-Chain Order Matching**: Orders can be matched through Fusion+ protocol
+- **Atomic Swap Guarantees**: Preserves HTLC security while enabling Fusion+ features
+
+### Quick Fusion+ Demo
+
+```bash
+# Run the complete Fusion+ demo
+node examples/fusion-demo.js
+
+# Or run the integration test
+pnpm fusion:test
+```
+
+See [FUSION_INTEGRATION.md](FUSION_INTEGRATION.md) for detailed documentation.
 
 ## Quick Start
 
@@ -61,7 +85,7 @@ cp eth-contracts/env.example eth-contracts/.env
 
 2. **Frontend Configuration** (`frontend/.env`):
    ```bash
-   VITE_ETH_HTLC_ADDRESS=0x03350065C0eAa7AD4410F72806E29AFDbC64A410
+   VITE_ETH_HTLC_ADDRESS=your_deployed_htlc_contract_address
    VITE_UNISAT_PUBKEY=your-unisat-public-key
    ```
 
@@ -85,6 +109,27 @@ pnpm cli create-order --orderId=my-order --amount=100000 --minFillAmount=10000 -
 ```
 
 ## CLI Commands
+
+### Fusion+ Integration
+```bash
+# Deploy FusionHTLC contract
+pnpm deploy:fusion --network goerli
+
+# Create Fusion+ order
+pnpm fusion:swap create --direction=eth2btc --ethAmount=0.01 --btcAmount=0.001 --ethAddress=0x... --btcAddress=bc1...
+
+# Match Fusion+ order
+pnpm fusion:swap match --orderId=0x... --secret=0x... --ethAmount=0.01
+
+# Check order status
+pnpm fusion:swap status --orderId=0x...
+
+# List active orders
+pnpm fusion:swap list
+
+# Run integration test
+pnpm fusion:test
+```
 
 ### Order Management
 ```bash

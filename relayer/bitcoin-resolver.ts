@@ -2,7 +2,7 @@ import { Logger } from './logger';
 import { ECPairFactory } from 'ecpair';
 import * as tinysecp from 'tiny-secp256k1';
 import * as bitcoin from 'bitcoinjs-lib';
-import * as ElectrumClient from 'electrum-client';
+const ElectrumClient = require('electrum-client');
 import { buildHTLCScript } from '../btc-scripts/htlc';
 
 interface CrossChainAction {
@@ -171,31 +171,32 @@ export class BitcoinResolver {
           const blockHash = await this.electrumClient.blockchainBlock_header(height);
           const block = await this.electrumClient.blockchainBlock_getChunk(blockHash);
           
-                                // Parse block transactions
-           const blockObj = bitcoin.Block.fromHex(block);
-           if (blockObj.transactions) {
-             for (const tx of blockObj.transactions) {
-               for (let i = 0; i < tx.outs.length; i++) {
-                 const output = tx.outs[i];
-                 
-                 // Check if this is a P2SH output (potential HTLC)
-                 if (this.isHTLCAddress(output.script)) {
-                   // Try to decode the redeem script
-                   const redeemScript = this.extractRedeemScript(output.script);
-                   if (redeemScript && this.containsHashlock(redeemScript, hashlockBuffer)) {
-                     return {
-                       txid: tx.getId(),
-                       vout: i,
-                       amount: output.value,
-                       script: output.script.toString('hex'),
-                       redeemScript: redeemScript.toString('hex'),
-                       address: bitcoin.address.fromOutputScript(output.script, this.network),
-                     };
-                   }
-                 }
-               }
-             }
-           } catch (error) {
+          // Parse block transactions
+          const blockObj = bitcoin.Block.fromHex(block);
+          if (blockObj.transactions) {
+            for (const tx of blockObj.transactions) {
+              for (let i = 0; i < tx.outs.length; i++) {
+                const output = tx.outs[i];
+                
+                // Check if this is a P2SH output (potential HTLC)
+                if (this.isHTLCAddress(output.script)) {
+                  // Try to decode the redeem script
+                  const redeemScript = this.extractRedeemScript(output.script);
+                  if (redeemScript && this.containsHashlock(redeemScript, hashlockBuffer)) {
+                    return {
+                      txid: tx.getId(),
+                      vout: i,
+                      amount: output.value,
+                      script: output.script.toString('hex'),
+                      redeemScript: redeemScript.toString('hex'),
+                      address: bitcoin.address.fromOutputScript(output.script, this.network),
+                    };
+                  }
+                }
+              }
+            }
+          }
+        } catch (error) {
           this.logger.debug(`Error processing block ${height}:`, error);
           continue;
         }
@@ -285,7 +286,7 @@ export class BitcoinResolver {
           value: htlcOutput.amount,
         },
         redeemScript: Buffer.from(htlcOutput.redeemScript, 'hex'),
-      });
+      } as any);
 
       // Add output (to a change address - this should be configurable)
       const changeAddress = this.generateChangeAddress();
@@ -325,7 +326,7 @@ export class BitcoinResolver {
           value: htlcOutput.amount,
         },
         redeemScript: Buffer.from(htlcOutput.redeemScript, 'hex'),
-      });
+      } as any);
 
       // Add output (to refund address - this should be configurable)
       const refundAddress = this.generateRefundAddress();

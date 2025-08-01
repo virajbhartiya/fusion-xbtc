@@ -60,7 +60,7 @@ async function main() {
     },
     redeemScript,
     sequence: 0, // allow locktime
-  });
+  } as any);
   psbt.addOutput({
     address: args.destAddress,
     value: parseInt(args.utxoAmount, 10) - parseInt(args.feeSats, 10),
@@ -69,7 +69,7 @@ async function main() {
   psbt.signInput(0, signer);
   psbt.finalizeAllInputs();
   const txHex = psbt.extractTransaction().toHex();
-  const txid = await client.blockchain_transaction_broadcast(txHex);
+  const txid = await client.blockchainTransaction_broadcast(txHex);
   await client.close();
   console.log(JSON.stringify({
     event: 'btc-refund',

@@ -1,8 +1,8 @@
 import { z } from 'zod';
 import * as bitcoin from 'bitcoinjs-lib';
-import { buildHTLCScript, getNetwork } from '../btc-scripts/htlc.ts';
+import { buildHTLCScript, getNetwork } from '../btc-scripts/htlc';
 import ElectrumClient from 'electrum-client';
-import { buildLockTx } from '../btc-scripts/tx-builder.ts';
+import { buildLockTx } from '../btc-scripts/tx-builder';
 import { ECPairFactory } from 'ecpair';
 import * as tinysecp from 'tiny-secp256k1';
 import fs from 'fs';
@@ -92,7 +92,7 @@ async function main() {
     await (client as any).close();
     console.log('Transaction broadcasted successfully:', txid);
   } catch (error) {
-    console.log('Failed to broadcast transaction via Electrum server:', error.message);
+    console.log('Failed to broadcast transaction via Electrum server:', (error as Error).message);
     console.log('You can manually broadcast the transaction hex above using a Bitcoin testnet explorer or wallet.');
     console.log('Transaction hex for manual broadcast:', txHex);
     process.exit(1);

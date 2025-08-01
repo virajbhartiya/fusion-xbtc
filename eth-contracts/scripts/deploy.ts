@@ -1,10 +1,13 @@
-import { ethers } from "hardhat";
+import fs from 'fs';
+import path from 'path';
+
+declare const hre: any;
 
 async function main() {
-  const ETHHTLC = await ethers.getContractFactory("ETHHTLC");
+  const ETHHTLC = await hre.ethers.getContractFactory("ETHHTLC");
   const contract = await ETHHTLC.deploy();
-  await (contract as any).deployTransaction.wait();
-  console.log("ETHHTLC deployed to:", (contract as any).address);
+  await contract.waitForDeployment();
+  console.log("ETHHTLC deployed to:", await contract.getAddress());
 }
 
 main().catch((error) => {

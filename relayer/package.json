@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "Relayer service for Fusion XBTC atomic swaps",
   "main": "index.ts",
-  "type": "module",
+
   "scripts": {
     "start": "ts-node index.ts",
     "dev": "ts-node --watch index.ts",

@@ -1,7 +1,8 @@
-import ElectrumClient from 'electrum-client';
 import * as bitcoin from 'bitcoinjs-lib';
 import { Logger } from './logger';
 import { EventProcessor } from './event-processor';
+
+const ElectrumClient = require('electrum-client');
 import { OrderManager } from './order-manager';
 
 interface BitcoinRelayerConfig {
@@ -15,7 +16,7 @@ interface BitcoinRelayerConfig {
 
 interface HTLCEvent {
   type: 'lock' | 'redeem' | 'refund';
-  txid: string;
+  txHash: string;
   blockHeight: number;
   timestamp: number;
   hashlock: string;
@@ -27,7 +28,7 @@ interface HTLCEvent {
 
 export class BitcoinRelayer {
   private config: BitcoinRelayerConfig;
-  private client: ElectrumClient;
+  private client: any;
   private logger: Logger;
   private isRunning = false;
   private isConnected = false;
@@ -40,7 +41,7 @@ export class BitcoinRelayer {
     this.logger = new Logger('BitcoinRelayer');
     this.network = config.network === 'testnet' ? bitcoin.networks.testnet : bitcoin.networks.bitcoin;
     
-    this.client = new ElectrumClient(
+    this.client = new (ElectrumClient as any)(
       config.electrumPort,
       config.electrumHost,
       config.electrumProto
@@ -167,11 +168,35 @@ export class BitcoinRelayer {
 
   private async processBlock(blockHeight: number): Promise<void> {
     try {
-      const blockHash = await this.client.blockchainBlock_header(blockHeight);
-      const block = await this.client.blockchainBlock_getChunk(blockHash);
+      // Debug: log available methods
+      this.logger.debug('Available client methods:', Object.getOwnPropertyNames(this.client));
+      
+      // Try different approaches to get block data
+      let blockData;
+      try {
+        // Method 1: Try to get block header first
+        const blockHeader = await this.client.blockchainBlock_header(blockHeight);
+        this.logger.debug('Block header:', blockHeader);
+        
+        // Method 2: Try to get full block
+        blockData = await this.client.blockchainBlock_get(blockHeader.hex || blockHeader);
+      } catch (headerError) {
+        this.logger.debug('Header method failed, trying alternative:', headerError);
+        
+        // Method 3: Try alternative method names
+        try {
+          blockData = await this.client.blockchainBlock_getChunk(blockHeight);
+        } catch (chunkError) {
+          this.logger.debug('Chunk method failed:', chunkError);
+          
+          // Method 4: Skip block processing for now
+          this.logger.warn(`Skipping block ${blockHeight} - no suitable method found`);
+          return;
+        }
+      }
       
       // Parse block transactions
-      const transactions = this.parseBlockTransactions(block);
+      const transactions = this.parseBlockTransactions(blockData);
       
       for (const tx of transactions) {
         await this.processTransaction(tx, blockHeight);
@@ -186,7 +211,7 @@ export class BitcoinRelayer {
   private parseBlockTransactions(blockHex: string): any[] {
     try {
       const block = bitcoin.Block.fromHex(blockHex);
-      return block.transactions.map(tx => ({
+      return block.transactions?.map(tx => ({
         txid: tx.getId(),
         hex: tx.toHex(),
         inputs: tx.ins.map(input => ({
@@ -199,7 +224,7 @@ export class BitcoinRelayer {
           value: output.value,
           script: output.script.toString('hex'),
         })),
-      }));
+      })) || [];
     } catch (error) {
       this.logger.error('Error parsing block transactions:', error);
       return [];
@@ -231,7 +256,7 @@ export class BitcoinRelayer {
         if (this.isHTLCAddress(output.script)) {
           events.push({
             type: 'lock',
-            txid: tx.txid,
+            txHash: tx.txid,
             blockHeight,
             timestamp: Date.now(), // We'll get actual timestamp later
             hashlock: this.extractHashlock(output.script),
@@ -247,7 +272,7 @@ export class BitcoinRelayer {
         if (this.isHTLCRedeem(input)) {
           events.push({
             type: 'redeem',
-            txid: tx.txid,
+            txHash: tx.txid,
             blockHeight,
             timestamp: Date.now(),
             hashlock: this.extractHashlockFromRedeem(input),

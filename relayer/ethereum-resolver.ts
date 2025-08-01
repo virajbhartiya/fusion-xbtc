@@ -40,7 +40,7 @@ export class EthereumResolver {
     this.wallet = new ethers.Wallet(privateKey, this.provider);
     
     // Connect contract to wallet for transactions
-    this.contract = this.contract.connect(this.wallet);
+    this.contract = this.contract!.connect(this.wallet) as any;
     
     this.logger.info('Ethereum resolver initialized', {
       rpcUrl,
@@ -253,9 +253,9 @@ export class EthereumResolver {
   } {
     return {
       initialized: this.contract !== null && this.wallet !== null,
-      network: this.provider?.network?.name,
+      network: this.provider?._network?.name,
       walletAddress: this.wallet?.address,
-      contractAddress: this.contract?.target,
+      contractAddress: this.contract?.target?.toString(),
     };
   }
 
@@ -265,7 +265,7 @@ export class EthereumResolver {
       throw new Error('Ethereum resolver not initialized');
     }
 
-    const balance = await this.wallet.getBalance();
+    const balance = await this.provider!.getBalance(this.wallet!.address);
     return ethers.formatEther(balance);
   }
 } 

@@ -1,7 +1,7 @@
 {
 	"name": "fusion-xbtc",
 	"version": "1.0.0",
-	"description": "Trustless atomic swaps between Ethereum and Bitcoin/Litecoin/Dogecoin/Bitcoin Cash with 1inch Fusion+ integration",
+	"description": "Trustless atomic swaps between Ethereum and Bitcoin/Litecoin/Dogecoin/Bitcoin Cash",
 	"private": true,
 	"workspaces": [
 		"cli",
@@ -9,8 +9,7 @@
 		"btc-scripts",
 		"relayer",
 		"frontend",
-		"common",
-		"1inch-fusion"
+		"common"
 	],
 	"scripts": {
 		"build": "pnpm -r build",
@@ -20,8 +19,10 @@
 		"relayer": "pnpm --filter relayer start",
 		"frontend": "pnpm --filter frontend dev",
 		"deploy:contract": "pnpm --filter eth-contracts deploy",
+		"deploy:fusion": "pnpm --filter eth-contracts run deploy-fusion-htlc",
 		"cli": "pnpm --filter cli",
-		"1inch": "pnpm --filter 1inch-fusion"
+		"fusion:test": "node test-fusion-integration.js",
+		"fusion:swap": "pnpm --filter cli fusion-swap"
 	},
 	"devDependencies": {
 		"bitcoinjs-lib": "^5.2.0",
@@ -42,7 +43,9 @@
 		"bs58": "^6.0.0",
 		"bs58check": "^4.0.0",
 		"buffer": "^6.0.3",
+		"cors": "^2.8.5",
 		"ecpair": "^2.1.0",
+		"express": "^5.1.0",
 		"tiny-secp256k1": "^2.2.4"
 	}
 }

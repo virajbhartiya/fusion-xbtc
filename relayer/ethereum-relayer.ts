@@ -165,8 +165,9 @@ export class EthereumRelayer {
 
       // Process transactions in the block
       for (const tx of block.transactions) {
-        if (tx.to && tx.to.toLowerCase() === this.config.contractAddress.toLowerCase()) {
-          await this.processTransaction(tx, blockNumber, block.timestamp || 0);
+        const transaction = tx as any;
+        if (transaction && transaction.to && transaction.to.toLowerCase() === this.config.contractAddress.toLowerCase()) {
+          await this.processTransaction(transaction, blockNumber, block.timestamp || 0);
         }
       }
       
@@ -223,11 +224,11 @@ export class EthereumRelayer {
       // Parse event based on topic
       const topic0 = log.topics[0];
       
-      if (topic0 === this.contract.interface.getEventTopic('Locked')) {
+      if (topic0 === this.contract.interface.getEvent('Locked')?.topicHash) {
         return this.parseLockedEvent(log, blockNumber, timestamp);
-      } else if (topic0 === this.contract.interface.getEventTopic('Redeemed')) {
+      } else if (topic0 === this.contract.interface.getEvent('Redeemed')?.topicHash) {
         return this.parseRedeemedEvent(log, blockNumber, timestamp);
-      } else if (topic0 === this.contract.interface.getEventTopic('Refunded')) {
+      } else if (topic0 === this.contract.interface.getEvent('Refunded')?.topicHash) {
         return this.parseRefundedEvent(log, blockNumber, timestamp);
       }
     } catch (error) {
@@ -239,6 +240,10 @@ export class EthereumRelayer {
 
   private parseLockedEvent(log: any, blockNumber: number, timestamp: number): HTLCEvent {
     const decodedLog = this.contract.interface.parseLog(log);
+    
+    if (!decodedLog) {
+      throw new Error('Failed to parse log');
+    }
     
     return {
       type: 'lock',
@@ -255,6 +260,10 @@ export class EthereumRelayer {
   private parseRedeemedEvent(log: any, blockNumber: number, timestamp: number): HTLCEvent {
     const decodedLog = this.contract.interface.parseLog(log);
     
+    if (!decodedLog) {
+      throw new Error('Failed to parse log');
+    }
+    
     return {
       type: 'redeem',
       txHash: log.transactionHash,
@@ -270,6 +279,10 @@ export class EthereumRelayer {
 
   private parseRefundedEvent(log: any, blockNumber: number, timestamp: number): HTLCEvent {
     const decodedLog = this.contract.interface.parseLog(log);
+    
+    if (!decodedLog) {
+      throw new Error('Failed to parse log');
+    }
     
     return {
       type: 'refund',
