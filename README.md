@@ -25,29 +25,20 @@ fusion-xbtc/
 ├── frontend/           # Web UI
 ├── common/             # Shared types and utilities
 ├── 1inch-fusion/      # Fusion+ integration module
-└── examples/           # Example swaps and configurations
+├── backend/            # Backend services
+├── examples/           # Example swaps and configurations
+├── scripts/            # Deployment and setup scripts
+└── logs/               # Swap logs and status tracking
 ```
 
 ## Fusion+ Integration
 
-The project now includes seamless integration with 1inch's Fusion+ protocol:
+The project includes seamless integration with 1inch's Fusion+ protocol:
 
 - **FusionHTLC Contract**: Extends ETHHTLC with Fusion+ order management
 - **Fusion+ API Integration**: Direct integration with 1inch Fusion+ API
 - **Cross-Chain Order Matching**: Orders can be matched through Fusion+ protocol
 - **Atomic Swap Guarantees**: Preserves HTLC security while enabling Fusion+ features
-
-### Quick Fusion+ Demo
-
-```bash
-# Run the complete Fusion+ demo
-node examples/fusion-demo.js
-
-# Or run the integration test
-pnpm fusion:test
-```
-
-See [FUSION_INTEGRATION.md](FUSION_INTEGRATION.md) for detailed documentation.
 
 ## Quick Start
 
@@ -64,14 +55,12 @@ See [FUSION_INTEGRATION.md](FUSION_INTEGRATION.md) for detailed documentation.
 # Clone and install dependencies
 git clone https://github.com/virajbhartiya/fusion-xbtc.git
 cd fusion-xbtc
+
+# Run setup script
+./setup.sh
+
+# Or manually install
 pnpm install
-
-# Set up environment variables
-cp relayer/env.example relayer/.env
-cp frontend/env.example frontend/.env
-cp eth-contracts/env.example eth-contracts/.env
-
-# Edit the .env files with your configuration
 ```
 
 ### Configuration
@@ -190,11 +179,12 @@ Start with `pnpm relayer` after configuring environment variables.
 
 ### Project Structure
 - **CLI**: TypeScript-based command-line tools
-- **Contracts**: Solidity HTLC implementation
+- **Contracts**: Solidity HTLC implementation (ETHHTLC.sol, FusionHTLC.sol)
 - **Scripts**: Bitcoin HTLC script builders and parsers
 - **Relayer**: Node.js service for cross-chain coordination
 - **Frontend**: React + Vite web application
 - **Common**: Shared types and utilities
+- **1inch-fusion**: Fusion+ protocol integration
 
 ### Testing
 ```bash
@@ -216,6 +206,23 @@ pnpm --filter frontend build
 pnpm --filter cli build
 ```
 
+## Deployment
+
+### Production Deployment
+```bash
+# Run deployment script
+./scripts/deploy.sh
+
+# Or use the setup script for development
+./setup.sh
+```
+
+### Environment Setup
+The project includes comprehensive setup scripts:
+- `setup.sh`: Development environment setup
+- `scripts/deploy.sh`: Production deployment
+- `dev.sh`: Development utilities
+
 ## Security
 
 - All inputs validated with Zod schemas
@@ -225,6 +232,13 @@ pnpm --filter cli build
 - No unverified redeemers
 - Comprehensive error handling and logging
 
+## Documentation
+
+- [Specification](spec.md): Detailed technical specification
+- [Implementation Guide](implementation.md): Implementation details
+- [Deployment Guide](README-DEPLOYMENT.md): Deployment instructions
+- [Deployment Summary](DEPLOYMENT_SUMMARY.md): Deployment status
+
 ## License
 
 MIT License - see LICENSE file for details.
@@ -232,5 +246,5 @@ MIT License - see LICENSE file for details.
 ## Support
 
 - Documentation: [docs.fusion.plus](https://docs.fusion.plus/)
-- Issues: [GitHub Issues](https://github.com/art3mis/fusion-xbtc/issues)
-- Discussions: [GitHub Discussions](https://github.com/art3mis/fusion-xbtc/discussions) 
+- Issues: [GitHub Issues](https://github.com/virajbhartiya/fusion-xbtc/issues)
+- Discussions: [GitHub Discussions](https://github.com/virajbhartiya/fusion-xbtc/discussions) 
