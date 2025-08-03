@@ -4,6 +4,14 @@ import type { Eip1193Provider } from 'ethers';
 
 const CONTRACT_ADDRESS = import.meta.env.VITE_FUSION_HTLC_ADDRESS || '0x0000000000000000000000000000000000000000';
 
+// Bitcoin block explorer URLs
+const getBitcoinExplorerUrl = (txHash: string, network: string = 'testnet') => {
+  if (network === 'mainnet') {
+    return `https://mempool.space/tx/${txHash}`;
+  }
+  return `https://mempool.space/testnet/tx/${txHash}`;
+};
+
 async function ensureBuffer() {
   if (typeof window !== 'undefined' && !(window as Window & { Buffer?: typeof import('buffer').Buffer }).Buffer) {
     const bufferModule = await import('buffer');
@@ -573,7 +581,8 @@ export default function App() {
             createdAt: new Date(Number(order[10]) * 1000).toISOString(),
             status: order[9] ? 'completed' : (isActive ? 'active' : 'inactive'),
             txHash: txHash,
-            matchTxHash: matchTxHash
+            matchTxHash: matchTxHash,
+            btcTxHash: '' // Will be populated when BTC transactions are available
           });
         } catch (error) {
           console.error(`Error fetching order ${orderId}:`, error);
@@ -659,7 +668,8 @@ export default function App() {
         createdAt: new Date(Number(order[10]) * 1000).toISOString(),
         status: isActive ? 'active' : 'inactive',
         txHash: txHash,
-        matchTxHash: matchTxHash
+        matchTxHash: matchTxHash,
+        btcTxHash: '' // Will be populated when BTC transactions are available
       };
       
       console.log('Order selected from blockchain:', orderData);
@@ -917,7 +927,40 @@ export default function App() {
               <p className="text-lg text-gray-600">Configure your cross-chain atomic swap</p>
             </div>
             
-            {direction === 'eth2btc' && (
+            {/* Ethereum wallet connection - required for Fusion+ orders */}
+            {useFusion && (
+              <div className="mb-6">
+                <label className="form-label">Ethereum wallet (required for Fusion+ orders)</label>
+                {ethAddress ? (
+                  <div className="message success">
+                    Connected: <code className="bg-white px-2 py-1 rounded text-sm">{ethAddress}</code>
+                  </div>
+                ) : (
+                  <button 
+                    type="button" 
+                    className="btn btn-secondary btn-full" 
+                    onClick={connectWallet}
+                    disabled={walletConnecting}
+                  >
+                    {walletConnecting ? (
+                      <>
+                        <svg className="animate-spin -ml-1 mr-3 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Connecting...
+                      </>
+                    ) : (
+                      'Connect MetaMask'
+                    )}
+                  </button>
+                )}
+                {walletError && <div className="message error">{walletError}</div>}
+              </div>
+            )}
+            
+            {/* Source chain wallet connections - for basic HTLC swaps */}
+            {!useFusion && direction === 'eth2btc' && (
               <div className="mb-6">
                 <label className="form-label">Ethereum wallet</label>
                 {ethAddress ? (
@@ -948,7 +991,7 @@ export default function App() {
               </div>
             )}
             
-            {direction === 'btc2eth' && (
+            {!useFusion && direction === 'btc2eth' && (
               <div className="mb-6">
                 <label className="form-label">{chain.toUpperCase()} wallet</label>
                 {utxoAddress ? (
@@ -1422,7 +1465,7 @@ export default function App() {
               <button 
                 type="submit" 
                   className="group relative inline-flex items-center px-12 py-6 rounded-2xl bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 text-white font-bold text-lg shadow-2xl hover:shadow-3xl transition-all duration-300 transform hover:-translate-y-1 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
-                disabled={!amount || !recipient || !timelock || (direction==='eth2btc' && !ethAddress) || (direction==='btc2eth' && !utxoAddress) || orderCreating}
+                disabled={!amount || !recipient || !timelock || (useFusion && !ethAddress) || (!useFusion && direction==='eth2btc' && !ethAddress) || (!useFusion && direction==='btc2eth' && !utxoAddress) || orderCreating}
               >
                   <div className="absolute inset-0 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 rounded-2xl blur opacity-75 group-hover:opacity-100 transition-opacity duration-300"></div>
                   <div className="relative flex items-center">
@@ -1503,6 +1546,21 @@ export default function App() {
                               className="btn btn-secondary inline-block px-2 py-1 text-xs"
                             >
                               View on Etherscan
+                            </a>
+                          </div>
+                        </div>
+                      )}
+                      {order.btcTxHash && (
+                        <div><strong>Bitcoin Transaction:</strong> 
+                          <code className="bg-gray-100 px-2 py-1 rounded text-sm ml-2">{order.btcTxHash.slice(0, 10)}...{order.btcTxHash.slice(-8)}</code>
+                          <div className="mt-1">
+                            <a 
+                              href={getBitcoinExplorerUrl(order.btcTxHash)} 
+                              target="_blank" 
+                              rel="noopener noreferrer" 
+                              className="btn btn-secondary inline-block px-2 py-1 text-xs"
+                            >
+                              View on Mempool.space
                             </a>
                           </div>
                         </div>
@@ -1604,6 +1662,21 @@ export default function App() {
                     </div>
                   </div>
                 )}
+                {selectedOrder.btcTxHash && (
+                  <div><strong>Bitcoin Transaction:</strong> 
+                    <code className="bg-white px-2 py-1 rounded text-sm ml-2">{selectedOrder.btcTxHash}</code>
+                    <div className="mt-1">
+                      <a 
+                        href={getBitcoinExplorerUrl(selectedOrder.btcTxHash)} 
+                        target="_blank" 
+                        rel="noopener noreferrer" 
+                        className="btn btn-secondary inline-block px-2 py-1 text-xs"
+                      >
+                        View on Mempool.space
+                      </a>
+                    </div>
+                  </div>
+                )}
                 <div className="mt-4">
                   <button 
                     onClick={() => matchSelectedOrder()}
@@ -1677,7 +1750,7 @@ export default function App() {
                     )}
                     {'btcTx' in log && typeof log.btcTx === 'string' && (
                       <div className="mt-2">
-                        <a href={`https://mempool.space/testnet/tx/${log.btcTx}`} target="_blank" rel="noopener noreferrer" className="btn btn-secondary inline-block px-4 py-2">View {chain.toUpperCase()} transaction</a>
+                        <a href={getBitcoinExplorerUrl(log.btcTx)} target="_blank" rel="noopener noreferrer" className="btn btn-secondary inline-block px-4 py-2">View {chain.toUpperCase()} transaction</a>
                       </div>
                     )}
                   </div>
@@ -1703,6 +1776,7 @@ export default function App() {
                         </div>
                       </div>
                     )}
+
                     {log && typeof log === 'object' && 'txHash' in log && typeof log.txHash === 'string' && (
                       <div className="mt-2">
                         <strong>Transaction Hash:</strong> <code className="bg-white px-2 py-1 rounded text-sm">{log.txHash}</code>
@@ -1757,7 +1831,21 @@ export default function App() {
                 <h3 className="font-semibold mb-4">UTXO chain actions</h3>
                 <button className="btn btn-primary mr-2" onClick={lockUtxo}>Lock funds (wallet)</button>
                 {utxoTxStatus && <div className="mt-2">{utxoTxStatus}</div>}
-                {utxoTxId && <div className="mt-2"><strong>TxID:</strong> <code className="bg-white px-2 py-1 rounded text-sm">{utxoTxId}</code></div>}
+                {utxoTxId && (
+                  <div className="mt-2">
+                    <strong>TxID:</strong> <code className="bg-white px-2 py-1 rounded text-sm">{utxoTxId}</code>
+                    <div className="mt-2">
+                      <a 
+                        href={getBitcoinExplorerUrl(utxoTxId)} 
+                        target="_blank" 
+                        rel="noopener noreferrer" 
+                        className="btn btn-secondary inline-block px-4 py-2 text-sm"
+                      >
+                        View on Mempool.space
+                      </a>
+                    </div>
+                  </div>
+                )}
                 <div className="mt-4">
                   <strong>Instructions:</strong>
                   <ol className="mt-2 pl-6">
