@@ -878,11 +878,11 @@ export default function App() {
                       </svg>
                       <span className="truncate">Swap Direction</span>
                     </label>
-                    <select className="form-select" value={direction} onChange={e => setDirection(e.target.value)}>
-                      {DIRECTIONS.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
-                    </select>
-                  </div>
-                  
+                <select className="form-select" value={direction} onChange={e => setDirection(e.target.value)}>
+                  {DIRECTIONS.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
+                </select>
+              </div>
+              
                   <div>
                     <label className="form-label flex items-center">
                       <svg className="w-4 h-4 mr-2 text-blue-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -890,9 +890,9 @@ export default function App() {
                       </svg>
                       <span className="truncate">UTXO Chain</span>
                     </label>
-                    <select className="form-select" value={chain} onChange={e => setChain(e.target.value)}>
-                      {CHAINS.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
-                    </select>
+                <select className="form-select" value={chain} onChange={e => setChain(e.target.value)}>
+                  {CHAINS.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+                </select>
                   </div>
                 </div>
               </div>
@@ -1028,9 +1028,9 @@ export default function App() {
                         </span>
                       </div>
                     </div>
-                  </div>
+              </div>
               
-                                {direction === 'btc2eth' && (
+              {direction === 'btc2eth' && (
                     <div>
                       <label className="form-label flex items-center">
                         <svg className="w-4 h-4 mr-2 text-purple-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1046,14 +1046,14 @@ export default function App() {
                         onChange={e => setChangeAddress(e.target.value)} 
                         placeholder={`Your ${chain.toUpperCase()} change address`} 
                       />
-                    </div>
-                  )}
+                </div>
+              )}
               
-                                {direction === 'eth2btc' && (
+              {direction === 'eth2btc' && (
                     <div>
-                      <button 
-                        type="button" 
-                        onClick={() => setShowAdvanced(v => !v)}
+                  <button 
+                    type="button" 
+                    onClick={() => setShowAdvanced(v => !v)}
                         className="w-full text-left p-4 bg-white/50 rounded-xl border border-purple-200 hover:bg-white hover:border-purple-300 transition-all duration-200"
                       >
                         <div className="flex items-center justify-between">
@@ -1067,9 +1067,9 @@ export default function App() {
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                           </svg>
                         </div>
-                      </button>
-                      
-                      {showAdvanced && (
+                  </button>
+                  
+                  {showAdvanced && (
                         <div className="mt-4 p-4 bg-white/50 rounded-xl border border-purple-200">
                           <label className="form-label flex items-center">
                             <svg className="w-4 h-4 mr-2 text-purple-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1085,12 +1085,12 @@ export default function App() {
                             placeholder="0x..." 
                           />
                           <div className="mt-2 text-sm text-gray-600 truncate">
-                            Default: {import.meta.env.VITE_ETH_HTLC_ADDRESS || 'Not set'}
+                        Default: {import.meta.env.VITE_ETH_HTLC_ADDRESS || 'Not set'}
                           </div>
-                        </div>
-                      )}
                     </div>
                   )}
+                </div>
+              )}
                 </div>
               </div>
               
@@ -1133,7 +1133,7 @@ export default function App() {
                       </div>
                     )}
                   </div>
-                </div>
+              </div>
               
               {useFusion && (
                   <div className="mt-6 p-6 bg-white/50 rounded-xl border border-orange-200">
@@ -1154,17 +1154,17 @@ export default function App() {
                     />
                   </div>
                                         <div className="flex gap-3">
-                      <button 
-                        type="button" 
-                        onClick={loadAvailableOrders}
+                    <button 
+                      type="button" 
+                      onClick={loadAvailableOrders}
                         disabled={!provider || !signer}
                         className={`btn ${provider && signer ? 'btn-secondary' : 'btn-secondary opacity-50 cursor-not-allowed'}`}
-                      >
+                    >
                         <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
                         </svg>
                         {provider && signer ? 'Browse Orders' : 'Connect Wallet First'}
-                      </button>
+                    </button>
                       <div className="text-sm text-gray-600 flex items-center">
                         {provider && signer ? (
                           <>
@@ -1181,8 +1181,8 @@ export default function App() {
                             Wallet required
                           </>
                         )}
-                      </div>
-                    </div>
+                  </div>
+                  </div>
                 </div>
               )}
               </div>
