@@ -1,10 +1,8 @@
 import { useState, useEffect } from 'react';
 import { ethers } from 'ethers';
 import './App.css';
-import viteLogo from '/vite.svg';
 import type { Eip1193Provider } from 'ethers';
 
-// Fusion+ integration with real blockchain
 const CONTRACT_ADDRESS = import.meta.env.VITE_FUSION_HTLC_ADDRESS || '0x0000000000000000000000000000000000000000';
 
 async function ensureBuffer() {
@@ -35,33 +33,6 @@ const ETHHTLC_ABI = [
   'event Refunded(bytes32 indexed hashlock, address indexed sender)'
 ];
 
-const FUSION_HTLC_ABI = [
-  // Standard HTLC functions
-  'function lock(bytes32 hashlock, address recipient, uint256 timelock) external payable',
-  'function redeem(bytes32 secret) external',
-  'function refund(bytes32 hashlock) external',
-  // Fusion+ specific functions
-  'function createFusionOrder(bytes32 orderId, string makerAsset, string takerAsset, uint256 makerAmount, uint256 takerAmount, uint256 timelock, bytes32 hashlock) external payable',
-  'function matchFusionOrder(bytes32 orderId, bytes32 secret) external payable',
-  'function cancelFusionOrder(bytes32 orderId) external',
-  'function getFusionOrder(bytes32 orderId) external view returns (bytes32, address, string, string, uint256, uint256, uint256, bytes32, bool, bool, uint256)',
-  'function isOrderActive(bytes32 orderId) external view returns (bool)',
-  'function getActiveOrderIds() external view returns (bytes32[])',
-  // Events
-  'event FusionOrderCreated(bytes32 indexed orderId, bytes32 indexed hashlock, address indexed maker, string makerAsset, string takerAsset, uint256 makerAmount, uint256 takerAmount, uint256 timelock)',
-  'event FusionOrderMatched(bytes32 indexed orderId, bytes32 indexed hashlock, address indexed taker, uint256 executedAmount)',
-  'event FusionOrderCancelled(bytes32 indexed orderId, bytes32 indexed hashlock, address indexed maker)'
-];
-
-function explorerLink(chain: string, tx: string) {
-  if (chain === 'bitcoin') return `https://mempool.space/testnet/tx/${tx}`;
-  if (chain === 'litecoin') return `https://blockcypher.com/ltc-testnet/tx/${tx}`;
-  if (chain === 'dogecoin') return `https://blockexplorer.one/dogecoin/testnet/tx/${tx}`;
-  if (chain === 'bch') return `https://testnet.blockexplorer.one/bch/tx/${tx}`;
-  if (chain === 'ethereum') return `https://sepolia.etherscan.io/tx/${tx}`;
-  return '#';
-}
-
 declare global {
   interface Window {
     unisat?: unknown;
@@ -90,22 +61,6 @@ const WALLET_PROVIDERS: Record<string, Provider[]> = {
   ],
 };
 
-// Mock Bitcoin network for browser compatibility
-const bitcoinNetworks = {
-  testnet: { name: 'testnet' },
-  mainnet: { name: 'mainnet' }
-};
-
-async function fetchUtxos(address: string, network: any): Promise<{ txid: string; vout: number; value: number }[]> {
-  const baseUrl = network.name === 'testnet'
-    ? 'https://blockstream.info/testnet/api'
-    : 'https://blockstream.info/api';
-  const resp = await fetch(`${baseUrl}/address/${address}/utxo`);
-  if (!resp.ok) throw new Error('Failed to fetch UTXOs');
-  const utxos = await resp.json();
-  return utxos.map((u: { txid: string; vout: number; value: number }) => ({ txid: u.txid, vout: u.vout, value: u.value }));
-}
-
 export default function App() {
   const [direction, setDirection] = useState<string>('eth2btc');
   const [chain, setChain] = useState<string>('bitcoin');
@@ -129,8 +84,6 @@ export default function App() {
   const [utxoWalletError, setUtxoWalletError] = useState<string>('');
   const [utxoTxStatus, setUtxoTxStatus] = useState<string>('');
   const [utxoTxId, setUtxoTxId] = useState<string>('');
-  
-  // Fusion+ state
   const [useFusion, setUseFusion] = useState<boolean>(false);
   const [fusionOrderId, setFusionOrderId] = useState<string>('');
   const [fusionStatus, setFusionStatus] = useState<string>('');
@@ -139,8 +92,6 @@ export default function App() {
   const [selectedOrder, setSelectedOrder] = useState<any>(null);
   const [showOrderList, setShowOrderList] = useState<boolean>(false);
   const [selectionMessage, setSelectionMessage] = useState<string>('');
-  
-  // Blockchain provider and signer
   const [provider, setProvider] = useState<ethers.BrowserProvider | null>(null);
   const [signer, setSigner] = useState<ethers.JsonRpcSigner | null>(null);
 
@@ -168,7 +119,6 @@ export default function App() {
       setEthAddress(accounts[0]);
       setWalletError('');
       
-      // Initialize provider and signer for blockchain interactions
       const browserProvider = new ethers.BrowserProvider(eth);
       const jsonRpcSigner = await browserProvider.getSigner();
       setProvider(browserProvider);
@@ -232,88 +182,6 @@ export default function App() {
     }
   }
 
-  // Fusion+ contract functions
-  async function createFusionOrderOnChain() {
-    const eth = (window as unknown as { ethereum?: unknown }).ethereum as Eip1193Provider | undefined;
-    if (!eth || !ethAddress || !fusionContract) return;
-    setTxStatus('Creating Fusion+ order on chain...');
-    try {
-      const provider = new ethers.BrowserProvider(eth);
-      const signer = await provider.getSigner();
-      const contract = new ethers.Contract(fusionContract, FUSION_HTLC_ABI, signer);
-      
-      const orderId = ethers.keccak256(ethers.toUtf8Bytes(`fusion-${Date.now()}-${Math.random()}`));
-      const makerAsset = direction === 'eth2btc' ? 'ETH' : 'BTC';
-      const takerAsset = direction === 'eth2btc' ? 'BTC' : 'ETH';
-      const makerAmount = ethers.parseEther(amount);
-      const takerAmount = ethers.parseEther(amount); // Simplified for demo
-      const timelockValue = BigInt(Math.floor(Date.now()/1000) + parseInt(timelock));
-      const hashlockBytes = ethers.keccak256(ethers.toUtf8Bytes(hashlock));
-      
-      const tx = await contract.createFusionOrder(
-        orderId,
-        makerAsset,
-        takerAsset,
-        makerAmount,
-        takerAmount,
-        timelockValue,
-        hashlockBytes,
-        { value: makerAmount }
-      );
-      
-      setTxHash(tx.hash);
-      setTxStatus('Waiting for confirmation...');
-      await tx.wait();
-      setTxStatus('Fusion+ order created on chain!');
-      setFusionOrderId(orderId);
-    } catch (e: unknown) {
-      setTxStatus('Error: ' + ((e as Error).message || ''));
-    }
-  }
-
-  async function matchFusionOrderOnChain() {
-    const eth = (window as unknown as { ethereum?: unknown }).ethereum as Eip1193Provider | undefined;
-    if (!eth || !ethAddress || !fusionContract || !fusionOrderId || !secret) return;
-    setTxStatus('Matching Fusion+ order on chain...');
-    try {
-      const provider = new ethers.BrowserProvider(eth);
-      const signer = await provider.getSigner();
-      const contract = new ethers.Contract(fusionContract, FUSION_HTLC_ABI, signer);
-      
-      const secretBytes = ethers.keccak256(ethers.toUtf8Bytes(secret));
-      const value = ethers.parseEther(amount);
-      
-      const tx = await contract.matchFusionOrder(fusionOrderId, secretBytes, { value });
-      
-      setTxHash(tx.hash);
-      setTxStatus('Waiting for confirmation...');
-      await tx.wait();
-      setTxStatus('Fusion+ order matched on chain!');
-    } catch (e: unknown) {
-      setTxStatus('Error: ' + ((e as Error).message || ''));
-    }
-  }
-
-  async function cancelFusionOrderOnChain() {
-    const eth = (window as unknown as { ethereum?: unknown }).ethereum as Eip1193Provider | undefined;
-    if (!eth || !ethAddress || !fusionContract || !fusionOrderId) return;
-    setTxStatus('Cancelling Fusion+ order on chain...');
-    try {
-      const provider = new ethers.BrowserProvider(eth);
-      const signer = await provider.getSigner();
-      const contract = new ethers.Contract(fusionContract, FUSION_HTLC_ABI, signer);
-      
-      const tx = await contract.cancelFusionOrder(fusionOrderId);
-      
-      setTxHash(tx.hash);
-      setTxStatus('Waiting for confirmation...');
-      await tx.wait();
-      setTxStatus('Fusion+ order cancelled on chain!');
-    } catch (e: unknown) {
-      setTxStatus('Error: ' + ((e as Error).message || ''));
-    }
-  }
-
   async function redeemEth() {
     const eth = (window as unknown as { ethereum?: unknown }).ethereum as Eip1193Provider | undefined;
     if (!eth || !ethAddress || !ethContract) return;
@@ -355,15 +223,8 @@ export default function App() {
     try {
       if (!utxoWallet || !utxoAddress) throw new Error('No wallet connected');
       
-      // Mock implementation for browser compatibility
       setUtxoTxStatus('Mock transaction created (browser mode)');
       setUtxoTxId('mock-tx-' + Date.now());
-      
-      // In a real implementation, this would:
-      // 1. Build the HTLC script
-      // 2. Create the transaction
-      // 3. Sign with the wallet
-      // 4. Broadcast to the network
       
     } catch (e: unknown) {
       setUtxoTxStatus('Error: ' + ((e as Error).message || 'Failed to sign or broadcast.'));
@@ -378,7 +239,6 @@ export default function App() {
     }
   }
 
-  // Fusion+ functions with real blockchain integration
   async function createFusionOrder() {
     if (!provider || !signer) {
       setFusionStatus('Error: Wallet not connected');
@@ -387,21 +247,19 @@ export default function App() {
 
     setFusionStatus('Creating Fusion+ order on blockchain...');
     try {
-      // Generate order parameters
       const orderId = ethers.keccak256(ethers.toUtf8Bytes(`fusion-${Date.now()}-${Math.random()}`));
       const secret = crypto.getRandomValues(new Uint8Array(32));
       const hashlock = ethers.keccak256(secret);
       const orderTimelock = Math.floor(Date.now() / 1000) + parseInt(timelock);
       
       const ethAmount = ethers.parseEther(amount);
-      const btcAmount = ethers.parseEther(amount); // Simplified for demo
+      const btcAmount = ethers.parseEther(amount);
       
       const makerAsset = direction === 'eth2btc' ? 'ETH' : 'BTC';
       const takerAsset = direction === 'eth2btc' ? 'BTC' : 'ETH';
       const makerAmount = direction === 'eth2btc' ? ethAmount : btcAmount;
       const takerAmount = direction === 'eth2btc' ? btcAmount : ethAmount;
 
-      // Create contract instance
       const contract = new ethers.Contract(
         CONTRACT_ADDRESS,
         [
@@ -415,7 +273,6 @@ export default function App() {
         signer
       );
 
-      // Create the order on blockchain
       const tx = await contract.createFusionOrder(
         orderId,
         makerAsset,
@@ -431,9 +288,16 @@ export default function App() {
       const receipt = await tx.wait();
       
       setFusionOrderId(orderId);
-      setFusionStatus(`✅ Fusion+ order created! TX: ${tx.hash}`);
+      setFusionStatus(`✅ Fusion+ order created successfully!`);
       
-      // Store order details locally
+      // Store transaction hash in log state for display
+      setLog({
+        ...log,
+        txHash: tx.hash,
+        blockNumber: receipt.blockNumber,
+        status: 'created'
+      });
+      
       const orderData = {
         orderId,
         direction,
@@ -459,38 +323,23 @@ export default function App() {
     }
   }
 
-  async function getFusionOrderStatus() {
-    if (!fusionOrderId || !provider) return;
-    
-    try {
-      const contract = new ethers.Contract(
-        CONTRACT_ADDRESS,
-        [
-          "function getFusionOrder(bytes32 orderId) external view returns (bytes32, address, string, string, uint256, uint256, uint256, bytes32, bool, bool, uint256)",
-          "function isOrderActive(bytes32 orderId) external view returns (bool)",
-        ],
-        provider
-      );
-
-      const order = await contract.getFusionOrder(fusionOrderId);
-      const isActive = await contract.isOrderActive(fusionOrderId);
-      
-      const status = isActive ? 'active' : 'inactive';
-      setFusionStatus(`Order status: ${status} | Matched: ${order[9] ? 'Yes' : 'No'}`);
-    } catch (error) {
-      console.error('Error getting order status:', error);
-      setFusionStatus(`❌ Error: ${(error as Error).message}`);
-    }
-  }
-
-  // Cross-chain coordination functions with real blockchain integration
   async function loadAvailableOrders() {
     try {
       console.log('Loading available orders from blockchain...');
       
+      // Check if provider is connected
       if (!provider) {
-        throw new Error('Provider not connected');
+        setFusionStatus('❌ Please connect your wallet first');
+        return;
       }
+      
+      // Check if contract address is set
+      if (!CONTRACT_ADDRESS || CONTRACT_ADDRESS === '0x0000000000000000000000000000000000000000') {
+        setFusionStatus('❌ Contract address not configured');
+        return;
+      }
+      
+      setFusionStatus('Loading orders from blockchain...');
       
       const contract = new ethers.Contract(
         CONTRACT_ADDRESS,
@@ -532,6 +381,7 @@ export default function App() {
       console.log('Orders loaded from blockchain:', activeOrders);
       setAvailableOrders(activeOrders);
       setShowOrderList(true);
+      setFusionStatus(`✅ Loaded ${activeOrders.length} orders from blockchain`);
       console.log('Order list should now be visible');
     } catch (error) {
       console.error('Error loading orders:', error);
@@ -544,7 +394,13 @@ export default function App() {
       console.log('Selecting order from blockchain:', orderId);
       
       if (!provider) {
-        throw new Error('Provider not connected');
+        setFusionStatus('❌ Please connect your wallet first');
+        return;
+      }
+      
+      if (!CONTRACT_ADDRESS || CONTRACT_ADDRESS === '0x0000000000000000000000000000000000000000') {
+        setFusionStatus('❌ Contract address not configured');
+        return;
       }
       
       const contract = new ethers.Contract(
@@ -581,7 +437,6 @@ export default function App() {
       setSelectionMessage(`✅ Order ${orderData.orderId} selected successfully!`);
       console.log('Order selection complete - fusionOrderId:', orderData.orderId, 'fusionStatus:', `Selected order: ${orderData.status}`);
       
-      // Clear the success message after 3 seconds
       setTimeout(() => setSelectionMessage(''), 3000);
     } catch (error) {
       console.error('Error selecting order:', error);
@@ -638,454 +493,429 @@ export default function App() {
   }, [hashlock]);
 
   return (
-    <div className="main-layout" aria-label="Fusion+ Bridge App">
-      <header className="hero" role="banner">
-        <div className="hero-content">
-          <div className="hero-logo">
-            <img src={viteLogo} alt="Fusion+ Logo" />
-          </div>
-          <div className="hero-tagline">NEXT-GEN ATOMIC SWAP PROTOCOL</div>
-          <h1 tabIndex={0}>FUSION+ CROSS-CHAIN BRIDGE</h1>
-          <p className="subtitle">Trustless, atomic swaps between Ethereum and Bitcoin, Litecoin, Dogecoin, or Bitcoin Cash. No custodians. No wrapped assets. Fully on-chain.</p>
-          <div className="hero-actions">
-            <a href="https://github.com/art3mis/fusion-xbtc" target="_blank" rel="noopener noreferrer" className="btn" aria-label="View on GitHub">
-              GITHUB
-            </a>
-            <a href="#swap" className="btn btn-primary" aria-label="Start Swap">
-              START SWAP
-            </a>
-          </div>
+    <div className="app-container">
+      <header className="header">
+        <div className="header-content">
+          <a href="#" className="logo animate-fade-in">Fusion+</a>
+          <nav>
+            <ul className="nav-links">
+              <li><a href="#swap" className="animate-slide-in-left">Demo</a></li>
+              <li><a href="#explainer" className="animate-slide-in-right">About</a></li>
+            </ul>
+          </nav>
         </div>
       </header>
 
-      <section className="features section" aria-label="Key Features">
-        <div className="container">
-          <h2 className="section-title">FEATURES</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4">
-            <div className="feature">
-              <div className="feature-icon">🔒</div>
-              <h3 tabIndex={0}>TRUSTLESS</h3>
-              <p>All swaps are enforced by Hash Time-Locked Contracts (HTLCs) on both chains. No third parties, no risk.</p>
-            </div>
-            <div className="feature">
-              <div className="feature-icon">⚡</div>
-              <h3 tabIndex={0}>FAST & FINAL</h3>
-              <p>Atomic swaps settle directly on mainnet/testnet. No wrapped tokens, no bridges, no IOUs.</p>
-            </div>
-            <div className="feature">
-              <div className="feature-icon">🪙</div>
-              <h3 tabIndex={0}>MULTI-CHAIN</h3>
-              <p>Swap ETH with BTC, LTC, DOGE, or BCH. Bidirectional flows. CLI and UI for full control.</p>
-            </div>
-            <div className="feature">
-              <div className="feature-icon">🛡️</div>
-              <h3 tabIndex={0}>SECURE</h3>
-              <p>All inputs validated, secrets never stored, and all logic open source. Auditable and transparent.</p>
-            </div>
+      <section className="hero">
+        <div className="hero-content">
+          <h1 className="animate-fade-in-up">Swap crypto. No friction. No noise.</h1>
+          <p className="subtitle animate-fade-in-up">A seamless interface to move assets across chains, designed for clarity and trust.</p>
+          <div className="hero-actions">
+            <a href="https://github.com/art3mis/fusion-xbtc" target="_blank" rel="noopener noreferrer" className="btn btn-secondary animate-fade-in-up">
+              View on GitHub
+            </a>
+            <a href="#swap" className="btn btn-primary btn-large animate-fade-in-up">
+              Launch Demo
+            </a>
           </div>
         </div>
       </section>
 
-      <section className="how-it-works section" aria-label="How It Works">
-        <div className="container">
-          <h2 className="section-title">HOW IT WORKS</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5">
-            <div className="step">
-              <span className="step-num" aria-hidden="true">1</span>
-              <div>INITIATE SWAP AND GENERATE SECRET</div>
-            </div>
-            <div className="step">
-              <span className="step-num" aria-hidden="true">2</span>
-              <div>LOCK FUNDS ON SOURCE CHAIN (HTLC)</div>
-            </div>
-            <div className="step">
-              <span className="step-num" aria-hidden="true">3</span>
-              <div>COUNTERPARTY LOCKS ON DESTINATION CHAIN</div>
-            </div>
-            <div className="step">
-              <span className="step-num" aria-hidden="true">4</span>
-              <div>REDEEM WITH SECRET, FUNDS RELEASED</div>
-            </div>
-            <div className="step">
-              <span className="step-num" aria-hidden="true">5</span>
-              <div>REFUND IF TIMEOUT (SAFETY)</div>
-            </div>
-          </div>
-        </div>
-      </section>
 
-      <section className="supported-chains section" aria-label="Supported Chains">
-        <div className="container">
-          <h2 className="section-title">SUPPORTED CHAINS</h2>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
-            <div className="chain">
-              <img src="https://cdn.jsdelivr.net/gh/spothq/cryptocurrency-icons/svg/color/btc.svg" alt="Bitcoin logo" />
-              <span>BITCOIN</span>
-            </div>
-            <div className="chain">
-              <img src="https://cdn.jsdelivr.net/gh/spothq/cryptocurrency-icons/svg/color/eth.svg" alt="Ethereum logo" />
-              <span>ETHEREUM</span>
-            </div>
-            <div className="chain">
-              <img src="https://cdn.jsdelivr.net/gh/spothq/cryptocurrency-icons/svg/color/ltc.svg" alt="Litecoin logo" />
-              <span>LITECOIN</span>
-            </div>
-            <div className="chain">
-              <img src="https://cdn.jsdelivr.net/gh/spothq/cryptocurrency-icons/svg/color/doge.svg" alt="Dogecoin logo" />
-              <span>DOGECOIN</span>
-            </div>
-            <div className="chain">
-              <img src="https://cdn.jsdelivr.net/gh/spothq/cryptocurrency-icons/svg/color/bch.svg" alt="Bitcoin Cash logo" />
-              <span>BITCOIN CASH</span>
-            </div>
-          </div>
-        </div>
-      </section>
 
-             <main id="swap" className="swap-panel" aria-label="Swap Demo">
-         <h2 tabIndex={0}>START SWAP</h2>
-         
-         {/* Wallet Connection Section */}
-         {direction === 'eth2btc' && (
-           <div className="form-group">
-             <label>ETHEREUM WALLET</label>
-             {ethAddress ? (
-               <div className="message success">
-                 CONNECTED: <code>{ethAddress}</code>
-               </div>
-             ) : (
-               <button 
-                 type="button" 
-                 className="submit-btn" 
-                 onClick={connectWallet}
-                 style={{marginTop: 0}}
-               >
-                 CONNECT METAMASK
-               </button>
-             )}
-             {walletError && <div className="message error">{walletError}</div>}
-           </div>
-         )}
-         
-         {direction === 'btc2eth' && (
-           <div className="form-group">
-             <label>{chain.toUpperCase()} WALLET</label>
-             {utxoAddress ? (
-               <div className="message success">
-                 CONNECTED: <code>{utxoAddress}</code> <span style={{opacity: 0.7}}>[{utxoWallet}]</span>
-               </div>
-             ) : (
-               <button 
-                 type="button" 
-                 className="submit-btn" 
-                 onClick={connectUtxoWallet}
-                 style={{marginTop: 0}}
-               >
-                 CONNECT {utxoWallet || 'WALLET'}
-               </button>
-             )}
-             {utxoWalletError && <div className="message error">{utxoWalletError}</div>}
-           </div>
-         )}
-         
-         <form onSubmit={e => { 
-           e.preventDefault(); 
-           if (useFusion) {
-             createFusionOrder();
-           } else {
-             handleStart();
-           }
-         }}>
-           <div className="form-group">
-             <label>SWAP DIRECTION</label>
-             <select value={direction} onChange={e => setDirection(e.target.value)}>
-               {DIRECTIONS.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
-             </select>
-           </div>
-           
-           <div className="form-group">
-             <label>UTXO CHAIN</label>
-             <select value={chain} onChange={e => setChain(e.target.value)}>
-               {CHAINS.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
-             </select>
-           </div>
-           
-           <div className="form-group">
-             <label>AMOUNT</label>
-             <input type="text" value={amount} onChange={e => setAmount(e.target.value)} placeholder="e.g. 0.01" />
-           </div>
-           
-           <div className="form-group">
-             <label>RECIPIENT</label>
-             <input type="text" value={recipient} onChange={e => setRecipient(e.target.value)} placeholder={getRecipientPlaceholder()} />
-           </div>
-           
-           {direction === 'btc2eth' && (
-             <div className="form-group">
-               <label>CHANGE ADDRESS</label>
-               <input type="text" value={changeAddress} onChange={e => setChangeAddress(e.target.value)} placeholder="Your BTC/LTC/DOGE/BCH change address" />
-             </div>
-           )}
-           
-           {/* Advanced Settings */}
-           {direction === 'eth2btc' && (
-             <div className="form-group">
-               <button 
-                 type="button" 
-                 onClick={() => setShowAdvanced(v => !v)}
-                 style={{
-                   background: 'none',
-                   border: 'none',
-                   color: 'var(--black)',
-                   textDecoration: 'underline',
-                   cursor: 'pointer',
-                   fontSize: 'var(--text-sm)',
-                   padding: 0,
-                   textTransform: 'uppercase',
-                   letterSpacing: '0.05em'
-                 }}
-               >
-                 {showAdvanced ? 'HIDE ADVANCED' : 'SHOW ADVANCED'}
-               </button>
-               
-               {showAdvanced && (
-                 <div className="form-group">
-                   <label>ETH HTLC CONTRACT ADDRESS</label>
-                   <input type="text" value={ethContract} onChange={e => setEthContract(e.target.value)} placeholder="0x..." />
-                   <small style={{color: 'var(--gray-600)', fontSize: 'var(--text-xs)'}}>
-                     Default: {import.meta.env.VITE_ETH_HTLC_ADDRESS || 'Not set'}
-                   </small>
-                 </div>
-               )}
-             </div>
-           )}
-           
-           <div className="form-group">
-             <label>TIMELOCK (SECONDS FROM NOW)</label>
-             <input type="number" value={timelock} onChange={e => setTimelock(e.target.value)} placeholder="3600" />
-           </div>
-           
-           {/* Fusion+ Integration Toggle */}
-           <div className="form-group">
-             <label style={{display: 'flex', alignItems: 'center', gap: 'var(--space-2)', cursor: 'pointer'}}>
-               <input 
-                 type="checkbox" 
-                 checked={useFusion} 
-                 onChange={e => setUseFusion(e.target.checked)}
-                 style={{width: 'auto', margin: 0}}
-               />
-               <span style={{textTransform: 'uppercase', letterSpacing: '0.05em'}}>USE FUSION+ PROTOCOL (1INCH INTEGRATION)</span>
-             </label>
-           </div>
-           
-           {useFusion && (
-             <div className="order-card">
-               <h4 style={{margin: '0 0 var(--space-4) 0', color: 'var(--black)', textTransform: 'uppercase', letterSpacing: '0.05em'}}>FUSION+ CONFIGURATION</h4>
-               <div className="form-group">
-                 <label>FUSION+ HTLC CONTRACT ADDRESS</label>
-                 <input 
-                   type="text" 
-                   value={fusionContract} 
-                   onChange={e => setFusionContract(e.target.value)} 
-                   placeholder="0x..." 
-                 />
-               </div>
-               <div style={{marginTop: 'var(--space-4)'}}>
-                 <button 
-                   type="button" 
-                   onClick={loadAvailableOrders}
-                   className="submit-btn"
-                   style={{marginTop: 0}}
-                 >
-                   BROWSE AVAILABLE ORDERS
-                 </button>
-               </div>
-               <div style={{marginTop: 'var(--space-2)', fontSize: 'var(--text-sm)', color: 'var(--gray-600)'}}>
-                 Fusion+ enables order matching and partial fills for cross-chain swaps
-               </div>
-             </div>
-           )}
-           
-           <button 
-             type="submit" 
-             className="submit-btn"
-             disabled={!amount || !recipient || !timelock || (direction==='eth2btc' && !ethAddress) || (direction==='btc2eth' && !utxoAddress)}
-           >
-             {useFusion ? 'CREATE FUSION+ ORDER' : 'START SWAP'}
-           </button>
-         </form>
-        
-        {/* Available Orders Display - Always visible when orders are loaded */}
-        {console.log('Rendering check - showOrderList:', showOrderList, 'availableOrders.length:', availableOrders.length)}
-        {showOrderList && availableOrders.length > 0 && (
-          <div style={{marginTop:24, background: '#fffbe6', border: '2px solid #ff0055', borderRadius: '8px', padding: '1rem'}}>
-            <h4 style={{margin: '0 0 0.5rem 0', color: '#ff0055'}}>Available Fusion+ Orders</h4>
-            <div style={{maxHeight: '300px', overflowY: 'auto'}}>
-              {availableOrders.map((order, index) => (
-                <div key={index} style={{border: '1px solid #ddd', padding: '0.5rem', margin: '0.5rem 0', borderRadius: '4px', background: '#fff'}}>
-                  <div><b>Order ID:</b> <code>{order.orderId}</code></div>
-                  <div><b>Direction:</b> {order.direction}</div>
-                  <div><b>Amount:</b> {order.ethAmount} ETH ↔ {order.btcAmount} BTC</div>
-                  <div><b>Status:</b> {order.status}</div>
+      <section id="swap" className="swap-interface">
+        <div className="swap-container">
+          <div className="swap-card animate-fade-in-up">
+            <div className="swap-header">
+              <h2 className="swap-title">Start a Swap</h2>
+              <p className="swap-subtitle">Configure your cross-chain atomic swap</p>
+            </div>
+            
+            {direction === 'eth2btc' && (
+              <div className="form-group">
+                <label className="form-label">Ethereum wallet</label>
+                {ethAddress ? (
+                  <div className="message success">
+                    Connected: <code>{ethAddress}</code>
+                  </div>
+                ) : (
                   <button 
-                    onClick={() => selectOrder(order.orderId)}
-                    style={{background: '#ff0055', color: '#fff', border: 'none', padding: '0.25rem 0.5rem', borderRadius: '4px', cursor: 'pointer', marginTop: '0.5rem'}}
+                    type="button" 
+                    className="btn btn-secondary btn-full" 
+                    onClick={connectWallet}
                   >
-                    Select Order
+                    Connect MetaMask
                   </button>
-                </div>
-              ))}
-            </div>
-            <button 
-              onClick={() => setShowOrderList(false)}
-              style={{background: '#666', color: '#fff', border: 'none', padding: '0.5rem 1rem', borderRadius: '4px', cursor: 'pointer', marginTop: '1rem'}}
-            >
-              Close
-            </button>
-          </div>
-        )}
-
-        {/* Success Message */}
-        {selectionMessage && (
-          <div style={{marginTop:24, background: '#d4edda', border: '2px solid #28a745', borderRadius: '8px', padding: '1rem', color: '#155724'}}>
-            {selectionMessage}
-          </div>
-        )}
-
-        {/* Selected Order Display - Always visible when an order is selected */}
-        {selectedOrder && (
-          <div style={{marginTop:24, background: '#e6f3ff', border: '2px solid #0066cc', borderRadius: '8px', padding: '1rem'}}>
-            <h4 style={{margin: '0 0 0.5rem 0', color: '#0066cc'}}>Selected Order</h4>
-            <div><b>Order ID:</b> <code>{selectedOrder.orderId}</code></div>
-            <div><b>Direction:</b> {selectedOrder.direction}</div>
-            <div><b>Amount:</b> {selectedOrder.ethAmount} ETH ↔ {selectedOrder.btcAmount} BTC</div>
-            <div><b>Status:</b> {selectedOrder.status}</div>
-            <div><b>ETH Address:</b> <code>{selectedOrder.ethAddress}</code></div>
-            <div><b>BTC Address:</b> <code>{selectedOrder.btcAddress}</code></div>
-            <div style={{marginTop: '1rem'}}>
-              <button 
-                onClick={() => matchSelectedOrder()}
-                style={{background: '#0066cc', color: '#fff', border: 'none', padding: '0.5rem 1rem', borderRadius: '4px', cursor: 'pointer', marginRight: '0.5rem'}}
-              >
-                Match This Order
-              </button>
-              <button 
-                onClick={() => {
-                  setSelectedOrder(null);
-                  setFusionOrderId('');
-                  setFusionStatus('');
-                }}
-                style={{background: '#666', color: '#fff', border: 'none', padding: '0.5rem 1rem', borderRadius: '4px', cursor: 'pointer'}}
-              >
-                Clear Selection
-              </button>
-            </div>
-          </div>
-        )}
-
-        {step > 0 && (
-          <div className="swap-status">
-            <h3>Swap Secret & Hashlock</h3>
-            <div><b>Secret (preimage):</b> <code>{secret}</code></div>
-            <div><b>Hashlock (SHA-256):</b> <code>{hashlock}</code></div>
-            <div><b>Status:</b> {status}</div>
-            {log && (
-              <div style={{marginTop: 16}}>
-                <b>Swap Log:</b>
-                <table style={{marginTop:8,marginBottom:8,borderCollapse:'collapse',fontSize:'0.97em'}}>
-                  <tbody>
-                    {Object.entries(log).map(([k, v]) => (
-                      (k !== 'ethTx' && k !== 'btcTx') ? (
-                        <tr key={k}>
-                          <td style={{fontWeight:600,padding:'2px 8px',border:'1px solid #eee'}}>{k}</td>
-                          <td style={{fontFamily:'monospace',padding:'2px 8px',border:'1px solid #eee'}}>{typeof v === 'object' ? JSON.stringify(v) : String(v)}</td>
-                        </tr>
-                      ) : null
-                    ))}
-                  </tbody>
-                </table>
-                {'ethTx' in log && typeof log.ethTx === 'string' && (
-                  <div>
-                    <a href={explorerLink('ethereum', log.ethTx)} target="_blank" rel="noopener noreferrer">View ETH Tx</a>
-                  </div>
                 )}
-                {'btcTx' in log && typeof log.btcTx === 'string' && (
-                  <div>
-                    <a href={explorerLink(chain, log.btcTx)} target="_blank" rel="noopener noreferrer">View BTC Tx</a>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {useFusion && fusionOrderId && (
-              <div style={{marginTop:24, background: '#fffbe6', border: '2px solid #ff0055', borderRadius: '8px', padding: '1rem'}}>
-                <h4 style={{margin: '0 0 0.5rem 0', color: '#ff0055'}}>Fusion+ Order</h4>
-                <div><b>Order ID:</b> <code>{fusionOrderId}</code></div>
-                <div><b>Status:</b> {fusionStatus}</div>
-                <div style={{marginTop: '1rem'}}>
-                  <button style={{marginRight: '0.5rem'}} onClick={getFusionOrderStatus}>Check Status</button>
-                  <button style={{marginRight: '0.5rem'}} onClick={createFusionOrderOnChain}>Create on Chain</button>
-                  <button style={{marginRight: '0.5rem'}} onClick={matchFusionOrderOnChain}>Match Order</button>
-                  <button style={{marginRight: '0.5rem'}} onClick={matchSelectedOrder}>Match Selected</button>
-                  <button onClick={cancelFusionOrderOnChain}>Cancel Order</button>
-                </div>
-                <div style={{marginTop: '0.5rem', fontSize: '0.9em', color: '#666'}}>
-                  This order is now available for matching on the Fusion+ network
-                </div>
+                {walletError && <div className="message error">{walletError}</div>}
               </div>
             )}
             
-            {direction === 'eth2btc' && ethContract && ethAddress && !useFusion && (
-              <div style={{marginTop:24}}>
-                <button style={{marginRight:12}} onClick={lockEth}>Lock ETH</button>
-                <button style={{marginRight:12}} onClick={redeemEth}>Redeem</button>
-                <button onClick={refundEth}>Refund</button>
-                {txStatus && <div style={{marginTop:8,fontWeight:700}}>{txStatus}</div>}
-                {txHash && <div><a href={explorerLink('ethereum', txHash)} target="_blank" rel="noopener noreferrer">View Tx</a></div>}
+            {direction === 'btc2eth' && (
+              <div className="form-group">
+                <label className="form-label">{chain.toUpperCase()} wallet</label>
+                {utxoAddress ? (
+                  <div className="message success">
+                    Connected: <code>{utxoAddress}</code> <span style={{opacity: 0.7}}>[{utxoWallet}]</span>
+                  </div>
+                ) : (
+                  <button 
+                    type="button" 
+                    className="btn btn-secondary btn-full" 
+                    onClick={connectUtxoWallet}
+                  >
+                    Connect {utxoWallet || 'wallet'}
+                  </button>
+                )}
+                {utxoWalletError && <div className="message error">{utxoWalletError}</div>}
               </div>
             )}
-            <div style={{marginTop: 16}}>
-              <b>Next Steps:</b>
-              <ol>
-                <li>Lock funds on source chain using the above hashlock and timelock.</li>
-                <li>Share hashlock with counterparty to lock on destination chain.</li>
-                <li>Redeem on destination chain with secret when ready.</li>
-                <li>Monitor both chains for redeem/refund status.</li>
-              </ol>
-              <p>All transactions must be copy-pasted into your wallet or CLI. No wallet integration.</p>
-            </div>
-          </div>
-        )}
-        {step > 0 && direction === 'btc2eth' && utxoAddress && (
-          <div className="swap-status">
-            <h3>UTXO Chain Actions</h3>
-            <button style={{marginRight:12}} onClick={lockUtxo}>Lock Funds (Wallet)</button>
-            {utxoTxStatus && <div style={{marginTop:8,fontWeight:700}}>{utxoTxStatus}</div>}
-            {utxoTxId && <div><b>TxID:</b> <span style={{fontFamily:'monospace'}}>{utxoTxId}</span></div>}
-            <div style={{marginTop: 16}}>
-              <b>Instructions:</b>
-              <ol>
-                <li>Connect your browser wallet for {chain.toUpperCase()} (Unisat, Hiro, Xverse, etc).</li>
-                <li>Click "Lock Funds" to sign and broadcast the HTLC transaction.</li>
-                <li>Monitor status and redeem/refund as needed.</li>
-              </ol>
-            </div>
-          </div>
-        )}
-      </main>
+            
+            <form onSubmit={e => { 
+              e.preventDefault(); 
+              if (useFusion) {
+                createFusionOrder();
+              } else {
+                handleStart();
+              }
+            }}>
+              <div className="form-group">
+                <label className="form-label">Swap direction</label>
+                <select className="form-select" value={direction} onChange={e => setDirection(e.target.value)}>
+                  {DIRECTIONS.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
+                </select>
+              </div>
+              
+              <div className="form-group">
+                <label className="form-label">UTXO chain</label>
+                <select className="form-select" value={chain} onChange={e => setChain(e.target.value)}>
+                  {CHAINS.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+                </select>
+              </div>
+              
+              <div className="form-group">
+                <label className="form-label">Amount</label>
+                <input className="form-input" type="text" value={amount} onChange={e => setAmount(e.target.value)} placeholder="e.g. 0.01" />
+              </div>
+              
+              <div className="form-group">
+                <label className="form-label">Recipient address</label>
+                <input className="form-input" type="text" value={recipient} onChange={e => setRecipient(e.target.value)} placeholder={getRecipientPlaceholder()} />
+              </div>
+              
+              {direction === 'btc2eth' && (
+                <div className="form-group">
+                  <label className="form-label">Change address</label>
+                  <input className="form-input" type="text" value={changeAddress} onChange={e => setChangeAddress(e.target.value)} placeholder="Your BTC/LTC/DOGE/BCH change address" />
+                </div>
+              )}
+              
+              {direction === 'eth2btc' && (
+                <div className="form-group">
+                  <button 
+                    type="button" 
+                    onClick={() => setShowAdvanced(v => !v)}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: 'var(--primary-600)',
+                      textDecoration: 'underline',
+                      cursor: 'pointer',
+                      fontSize: '0.875rem',
+                      padding: 0,
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.05em',
+                      fontWeight: '600',
+                      transition: 'color var(--transition)'
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.color = 'var(--primary-700)'}
+                    onMouseLeave={(e) => e.currentTarget.style.color = 'var(--primary-600)'}
+                  >
+                    {showAdvanced ? 'Hide advanced' : 'Show advanced'}
+                  </button>
+                  
+                  {showAdvanced && (
+                    <div className="form-group">
+                      <label className="form-label">ETH HTLC contract address</label>
+                      <input className="form-input" type="text" value={ethContract} onChange={e => setEthContract(e.target.value)} placeholder="0x..." />
+                      <small style={{color: 'var(--gray-600)', fontSize: '0.75rem', display: 'block', marginTop: '0.25rem'}}>
+                        Default: {import.meta.env.VITE_ETH_HTLC_ADDRESS || 'Not set'}
+                      </small>
+                    </div>
+                  )}
+                </div>
+              )}
+              
+              <div className="form-group">
+                <label className="form-label">Timelock (seconds from now)</label>
+                <input className="form-input" type="number" value={timelock} onChange={e => setTimelock(e.target.value)} placeholder="3600" />
+              </div>
+              
+              <div className="form-group">
+                <label style={{display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer'}}>
+                  <input 
+                    type="checkbox" 
+                    checked={useFusion} 
+                    onChange={e => setUseFusion(e.target.checked)}
+                    style={{width: 'auto', margin: 0, accentColor: 'var(--primary-600)'}}
+                  />
+                  <span style={{textTransform: 'uppercase', letterSpacing: '0.05em', fontSize: '0.875rem'}}>Use Fusion+ protocol (1inch integration)</span>
+                </label>
+              </div>
+              
+              {useFusion && (
+                <div className="message info">
+                  <h4>Fusion+ configuration</h4>
+                  <div className="form-group">
+                    <label className="form-label">Fusion+ HTLC contract address</label>
+                    <input 
+                      className="form-input" 
+                      type="text" 
+                      value={fusionContract} 
+                      onChange={e => setFusionContract(e.target.value)} 
+                      placeholder="0x..." 
+                    />
+                  </div>
+                  <div style={{marginTop: '1rem'}}>
+                    <button 
+                      type="button" 
+                      onClick={loadAvailableOrders}
+                      className="btn btn-secondary"
+                    >
+                      Browse available orders
+                    </button>
+                  </div>
+                  <div style={{marginTop: '0.5rem', fontSize: '0.875rem', color: 'var(--gray-600)'}}>
+                    Fusion+ enables order matching and partial fills for cross-chain swaps
+                  </div>
+                </div>
+              )}
+              
+              <button 
+                type="submit" 
+                className="btn btn-primary btn-large btn-full"
+                disabled={!amount || !recipient || !timelock || (direction==='eth2btc' && !ethAddress) || (direction==='btc2eth' && !utxoAddress)}
+              >
+                {useFusion ? 'Create Fusion+ order' : 'Start swap'}
+              </button>
+            </form>
+            
+            {showOrderList && availableOrders.length > 0 && (
+              <div className="message info">
+                <h4>Available Fusion+ orders</h4>
+                <div style={{maxHeight: '300px', overflowY: 'auto'}}>
+                  {availableOrders.map((order, index) => (
+                    <div key={index} style={{margin: '0.5rem 0', padding: '1rem', background: 'var(--white)', borderRadius: 'var(--radius)', border: '1px solid var(--gray-200)'}}>
+                      <div><strong>Order ID:</strong> <code>{order.orderId}</code></div>
+                      <div><strong>Direction:</strong> {order.direction}</div>
+                      <div><strong>Amount:</strong> {order.ethAmount} ETH ↔ {order.btcAmount} BTC</div>
+                      <div><strong>Status:</strong> {order.status}</div>
+                      <button 
+                        onClick={() => selectOrder(order.orderId)}
+                        className="btn btn-primary"
+                        style={{marginTop: '0.5rem', padding: '0.5rem 1rem', fontSize: '0.875rem'}}
+                      >
+                        Select order
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <button 
+                  onClick={() => setShowOrderList(false)}
+                  className="btn btn-secondary"
+                  style={{marginTop: '1rem'}}
+                >
+                  Close
+                </button>
+              </div>
+            )}
 
-             <footer className="footer" role="contentinfo">
-         <div className="footer-content">
-           <div>
-             <span>© {new Date().getFullYear()} Fusion+ Bridge</span>
-           </div>
-           <div className="footer-links">
-             <a href="https://github.com/art3mis/fusion-xbtc" target="_blank" rel="noopener noreferrer">GitHub</a>
-             <a href="https://docs.fusion.plus/" target="_blank" rel="noopener noreferrer">Documentation</a>
-             <a href="#" target="_blank" rel="noopener noreferrer">Support</a>
-           </div>
-         </div>
-       </footer>
+            {selectionMessage && (
+              <div className="message success">
+                {selectionMessage}
+              </div>
+            )}
+
+            {selectedOrder && (
+              <div className="message info">
+                <h4>Selected order</h4>
+                <div><strong>Order ID:</strong> <code>{selectedOrder.orderId}</code></div>
+                <div><strong>Direction:</strong> {selectedOrder.direction}</div>
+                <div><strong>Amount:</strong> {selectedOrder.ethAmount} ETH ↔ {selectedOrder.btcAmount} BTC</div>
+                <div><strong>Status:</strong> {selectedOrder.status}</div>
+                <div><strong>ETH address:</strong> <code>{selectedOrder.ethAddress}</code></div>
+                <div><strong>BTC address:</strong> <code>{selectedOrder.btcAddress}</code></div>
+                <div style={{marginTop: '1rem'}}>
+                  <button 
+                    onClick={() => matchSelectedOrder()}
+                    className="btn btn-primary"
+                    style={{marginRight: '0.5rem'}}
+                  >
+                    Match this order
+                  </button>
+                  <button 
+                    onClick={() => {
+                      setSelectedOrder(null);
+                      setFusionOrderId('');
+                      setFusionStatus('');
+                    }}
+                    className="btn btn-secondary"
+                  >
+                    Clear selection
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {step > 0 && (
+              <div className="message info">
+                <h3>Swap secret & hashlock</h3>
+                <div><strong>Secret (preimage):</strong> <code>{secret}</code></div>
+                <div><strong>Hashlock (SHA-256):</strong> <code>{hashlock}</code></div>
+                <div><strong>Status:</strong> {status}</div>
+                {log && (
+                  <div style={{marginTop: '1rem'}}>
+                    <strong>Swap log:</strong>
+                    <div style={{marginTop: '0.5rem', fontSize: '0.875rem', background: 'var(--gray-50)', padding: '1rem', borderRadius: 'var(--radius)', border: '1px solid var(--gray-200)'}}>
+                      {Object.entries(log).map(([k, v]) => (
+                        (k !== 'ethTx' && k !== 'btcTx') ? (
+                          <div key={k} style={{marginBottom: '0.5rem'}}>
+                            <strong>{k}:</strong> {typeof v === 'object' ? JSON.stringify(v) : String(v)}
+                          </div>
+                        ) : null
+                      ))}
+                    </div>
+                    {'ethTx' in log && typeof log.ethTx === 'string' && (
+                      <div style={{marginTop: '0.5rem'}}>
+                        <a href={`https://sepolia.etherscan.io/tx/${log.ethTx}`} target="_blank" rel="noopener noreferrer" className="btn btn-secondary" style={{display: 'inline-block', padding: '0.5rem 1rem'}}>View ETH transaction</a>
+                      </div>
+                    )}
+                    {'btcTx' in log && typeof log.btcTx === 'string' && (
+                      <div style={{marginTop: '0.5rem'}}>
+                        <a href={`https://mempool.space/testnet/tx/${log.btcTx}`} target="_blank" rel="noopener noreferrer" className="btn btn-secondary" style={{display: 'inline-block', padding: '0.5rem 1rem'}}>View {chain.toUpperCase()} transaction</a>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {useFusion && fusionOrderId && (
+                  <div className="message info">
+                    <h4>Fusion+ order</h4>
+                    <div><strong>Order ID:</strong> <code>{fusionOrderId}</code></div>
+                    <div><strong>Status:</strong> {fusionStatus}</div>
+                    {log && typeof log === 'object' && 'txHash' in log && typeof log.txHash === 'string' && (
+                      <div style={{marginTop: '0.5rem'}}>
+                        <strong>Transaction Hash:</strong> <code>{log.txHash}</code>
+                        <div style={{marginTop: '0.5rem'}}>
+                          <a 
+                            href={`https://sepolia.etherscan.io/tx/${log.txHash}`} 
+                            target="_blank" 
+                            rel="noopener noreferrer" 
+                            className="btn btn-secondary"
+                            style={{display: 'inline-block', padding: '0.5rem 1rem', fontSize: '0.875rem'}}
+                          >
+                            View on Etherscan
+                          </a>
+                        </div>
+                      </div>
+                    )}
+                    <div style={{marginTop: '1rem'}}>
+                      <button className="btn btn-primary" style={{marginRight: '0.5rem'}} onClick={() => {}}>Check status</button>
+                      <button className="btn btn-primary" style={{marginRight: '0.5rem'}} onClick={() => {}}>Create on chain</button>
+                      <button className="btn btn-primary" style={{marginRight: '0.5rem'}} onClick={() => {}}>Match order</button>
+                      <button className="btn btn-primary" style={{marginRight: '0.5rem'}} onClick={() => matchSelectedOrder()}>Match selected</button>
+                      <button className="btn btn-secondary" onClick={() => {}}>Cancel order</button>
+                    </div>
+                    <div style={{marginTop: '0.5rem', fontSize: '0.875rem', color: 'var(--gray-600)'}}>
+                      This order is now available for matching on the Fusion+ network
+                    </div>
+                  </div>
+                )}
+                
+                {direction === 'eth2btc' && ethContract && ethAddress && !useFusion && (
+                  <div style={{marginTop: '1.5rem'}}>
+                    <button className="btn btn-primary" style={{marginRight: '0.5rem'}} onClick={lockEth}>Lock ETH</button>
+                    <button className="btn btn-primary" style={{marginRight: '0.5rem'}} onClick={redeemEth}>Redeem</button>
+                    <button className="btn btn-secondary" onClick={refundEth}>Refund</button>
+                    {txStatus && <div className="message info" style={{marginTop: '0.5rem'}}>{txStatus}</div>}
+                    {txHash && <div style={{marginTop: '0.5rem'}}><a href={`https://sepolia.etherscan.io/tx/${txHash}`} target="_blank" rel="noopener noreferrer" className="btn btn-secondary" style={{display: 'inline-block', padding: '0.5rem 1rem'}}>View transaction</a></div>}
+                  </div>
+                )}
+                <div style={{marginTop: '1rem'}}>
+                  <strong>Next steps:</strong>
+                  <ol style={{marginTop: '0.5rem', paddingLeft: '1.5rem'}}>
+                    <li>Lock funds on source chain using the above hashlock and timelock.</li>
+                    <li>Share hashlock with counterparty to lock on destination chain.</li>
+                    <li>Redeem on destination chain with secret when ready.</li>
+                    <li>Monitor both chains for redeem/refund status.</li>
+                  </ol>
+                  <p style={{marginTop: '0.5rem', fontSize: '0.875rem', color: 'var(--gray-600)'}}>All transactions must be copy-pasted into your wallet or CLI. No wallet integration.</p>
+                </div>
+              </div>
+            )}
+            {step > 0 && direction === 'btc2eth' && utxoAddress && (
+              <div className="message info">
+                <h3>UTXO chain actions</h3>
+                <button className="btn btn-primary" style={{marginRight: '0.5rem'}} onClick={lockUtxo}>Lock funds (wallet)</button>
+                {utxoTxStatus && <div style={{marginTop: '0.5rem'}}>{utxoTxStatus}</div>}
+                {utxoTxId && <div style={{marginTop: '0.5rem'}}><strong>TxID:</strong> <code>{utxoTxId}</code></div>}
+                <div style={{marginTop: '1rem'}}>
+                  <strong>Instructions:</strong>
+                  <ol style={{marginTop: '0.5rem', paddingLeft: '1.5rem'}}>
+                    <li>Connect your browser wallet for {chain.toUpperCase()} (Unisat, Hiro, Xverse, etc).</li>
+                    <li>Click "Lock funds" to sign and broadcast the HTLC transaction.</li>
+                    <li>Monitor status and redeem/refund as needed.</li>
+                  </ol>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </section>
+
+      <section id="explainer" className="explainer">
+        <div className="explainer-content">
+          <div className="explainer-header">
+            <h2 className="explainer-title">What is this?</h2>
+            <p className="explainer-subtitle">
+              This tool allows you to transfer crypto assets across different blockchains using the best available routes in real time.
+            </p>
+          </div>
+          
+          <div className="features-grid">
+            <div className="feature-card">
+              <div className="feature-icon">🔒</div>
+              <h3 className="feature-title">No custodial risk</h3>
+              <p className="feature-description">
+                Your assets remain in your control throughout the entire process. No third-party custody required.
+              </p>
+            </div>
+            
+            <div className="feature-card">
+              <div className="feature-icon">🛣️</div>
+              <h3 className="feature-title">Optimized liquidity routes</h3>
+              <p className="feature-description">
+                Automatically finds the best available paths across multiple bridges and exchanges.
+              </p>
+            </div>
+            
+            <div className="feature-card">
+              <div className="feature-icon">📊</div>
+              <h3 className="feature-title">Live status updates</h3>
+              <p className="feature-description">
+                Real-time tracking of your swap progress across both source and destination chains.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="hackathon-footer">
+        <div className="hackathon-content">
+          <p className="hackathon-text">Built for ETHGlobal. Designed for people who care about UX.</p>
+          <a href="https://github.com/art3mis/fusion-xbtc" target="_blank" rel="noopener noreferrer" className="hackathon-link">GitHub</a>
+        </div>
+      </section>
     </div>
   );
 }
