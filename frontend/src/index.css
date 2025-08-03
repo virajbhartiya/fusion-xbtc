@@ -43,15 +43,15 @@
   }
 
   .form-input {
-    @apply w-full px-4 py-4 text-gray-900 bg-white/90 backdrop-blur-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 placeholder-gray-500 hover:border-gray-300 transition-all duration-200 shadow-sm hover:shadow-md;
+    @apply w-full px-4 py-4 text-gray-900 bg-white/90 backdrop-blur-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 placeholder-gray-500 hover:border-gray-300 transition-all duration-200 shadow-sm hover:shadow-md min-w-0;
   }
 
   .form-select {
-    @apply w-full px-4 py-4 text-gray-900 bg-white/90 backdrop-blur-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 hover:border-gray-300 transition-all duration-200 shadow-sm hover:shadow-md;
+    @apply w-full px-4 py-4 text-gray-900 bg-white/90 backdrop-blur-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 hover:border-gray-300 transition-all duration-200 shadow-sm hover:shadow-md min-w-0;
   }
 
   .form-label {
-    @apply block text-sm font-semibold text-gray-700 mb-3;
+    @apply block text-sm font-semibold text-gray-700 mb-3 min-w-0;
   }
 
   .message {

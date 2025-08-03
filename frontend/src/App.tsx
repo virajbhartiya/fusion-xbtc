@@ -94,7 +94,110 @@ export default function App() {
   const [provider, setProvider] = useState<ethers.BrowserProvider | null>(null);
   const [signer, setSigner] = useState<ethers.JsonRpcSigner | null>(null);
 
+  // Exchange rate state
+  const [exchangeRate, setExchangeRate] = useState<number | null>(null);
+  const [rateLoading, setRateLoading] = useState(false);
+  const [rateError, setRateError] = useState<string | null>(null);
+  const [lastRateUpdate, setLastRateUpdate] = useState<Date | null>(null);
+
   useEffect(() => { ensureBuffer(); }, []);
+
+  // Exchange rate functions
+  async function fetchExchangeRate() {
+    setRateLoading(true);
+    setRateError(null);
+    
+    try {
+      // Try multiple exchange rate sources for reliability
+      const sources = [
+        'https://api.coingecko.com/api/v3/simple/price?ids=ethereum,bitcoin&vs_currencies=usd',
+        'https://api.binance.com/api/v3/ticker/price?symbol=ETHUSDT',
+        'https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT'
+      ];
+      
+      let ethPrice = 0;
+      let btcPrice = 0;
+      
+      // Try CoinGecko first (most reliable for crypto pairs)
+      try {
+        const response = await fetch(sources[0]);
+        if (response.ok) {
+          const data = await response.json();
+          ethPrice = data.ethereum.usd;
+          btcPrice = data.bitcoin.usd;
+        }
+      } catch (error) {
+        console.log('CoinGecko failed, trying Binance...');
+      }
+      
+      // Fallback to Binance if CoinGecko fails
+      if (!ethPrice || !btcPrice) {
+        try {
+          const [ethResponse, btcResponse] = await Promise.all([
+            fetch(sources[1]),
+            fetch(sources[2])
+          ]);
+          
+          if (ethResponse.ok && btcResponse.ok) {
+            const ethData = await ethResponse.json();
+            const btcData = await btcResponse.json();
+            ethPrice = parseFloat(ethData.price);
+            btcPrice = parseFloat(btcData.price);
+          }
+        } catch (error) {
+          console.log('Binance failed, using fallback rate...');
+        }
+      }
+      
+      // Final fallback: use a reasonable estimate if all APIs fail
+      if (!ethPrice || !btcPrice) {
+        ethPrice = 3000; // Fallback ETH price
+        btcPrice = 60000; // Fallback BTC price
+        setRateError('Using estimated rates - live rates unavailable');
+      }
+      
+      const rate = ethPrice / btcPrice;
+      setExchangeRate(rate);
+      setLastRateUpdate(new Date());
+      
+    } catch (error) {
+      console.error('Failed to fetch exchange rate:', error);
+      setRateError('Failed to fetch live rates');
+      // Use a reasonable fallback rate
+      setExchangeRate(0.05); // 1 ETH = 0.05 BTC (rough estimate)
+    } finally {
+      setRateLoading(false);
+    }
+  }
+
+  // Auto-refresh rate every 30 seconds
+  useEffect(() => {
+    fetchExchangeRate();
+    const interval = setInterval(fetchExchangeRate, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Calculate amounts based on real exchange rate
+  function calculateAmounts(inputAmount: string, inputDirection: string) {
+    if (!exchangeRate || !inputAmount) return { input: inputAmount, output: '0' };
+    
+    const amount = parseFloat(inputAmount);
+    if (isNaN(amount)) return { input: inputAmount, output: '0' };
+    
+    if (inputDirection === 'eth2btc') {
+      const btcAmount = amount * exchangeRate;
+      return {
+        input: inputAmount,
+        output: btcAmount.toFixed(8)
+      };
+    } else {
+      const ethAmount = amount / exchangeRate;
+      return {
+        input: inputAmount,
+        output: ethAmount.toFixed(6)
+      };
+    }
+  }
 
   function generateSecret() {
     const arr = new Uint8Array(32);
@@ -240,7 +343,19 @@ export default function App() {
 
   async function createFusionOrder() {
     if (!provider || !signer) {
-      setFusionStatus('Error: Wallet not connected');
+      setFusionStatus('❌ Please connect your MetaMask wallet first');
+      return;
+    }
+
+    // Additional check to ensure we have a valid signer
+    try {
+      const address = await signer.getAddress();
+      if (!address) {
+        setFusionStatus('❌ Please connect your MetaMask wallet first');
+        return;
+      }
+    } catch (error) {
+      setFusionStatus('❌ Please connect your MetaMask wallet first');
       return;
     }
 
@@ -252,14 +367,21 @@ export default function App() {
       const timelockSeconds = timelock ? parseInt(timelock) : 3600; // Default to 1 hour if not set
       const orderTimelock = Math.floor(Date.now() / 1000) + timelockSeconds;
       
-      // Calculate exchange rate (mock - in real app this would come from price feeds)
-      const ethToBtcRate = 0.002; // 1 ETH = 0.002 BTC (mock rate)
-      const btcToEthRate = 1 / ethToBtcRate; // 1 BTC = 500 ETH
+      // Use real exchange rate with small spread for liquidity provider
+      if (!exchangeRate) {
+        setFusionStatus('❌ Exchange rate not available. Please wait...');
+        return;
+      }
+      
+      const spread = 0.001; // 0.1% spread for liquidity provider
+      const adjustedRate = direction === 'eth2btc' 
+        ? exchangeRate * (1 - spread) // Slightly worse rate for user
+        : exchangeRate * (1 + spread); // Slightly better rate for user
       
       const ethAmount = ethers.parseEther(amount);
       const btcAmount = direction === 'eth2btc' 
-        ? ethers.parseEther((parseFloat(amount) * ethToBtcRate).toFixed(8))
-        : ethers.parseEther((parseFloat(amount) * btcToEthRate).toFixed(8));
+        ? ethers.parseEther((parseFloat(amount) * adjustedRate).toFixed(8))
+        : ethers.parseEther((parseFloat(amount) / adjustedRate).toFixed(8));
       
       const makerAsset = direction === 'eth2btc' ? 'ETH' : 'BTC';
       const takerAsset = direction === 'eth2btc' ? 'BTC' : 'ETH';
@@ -333,9 +455,21 @@ export default function App() {
     try {
       console.log('Loading available orders from blockchain...');
       
-      // Check if provider is connected
-      if (!provider) {
-        setFusionStatus('❌ Please connect your wallet first');
+      // Check if provider and signer are connected
+      if (!provider || !signer) {
+        setFusionStatus('❌ Please connect your MetaMask wallet first');
+        return;
+      }
+
+      // Additional check to ensure we have a valid signer
+      try {
+        const address = await signer.getAddress();
+        if (!address) {
+          setFusionStatus('❌ Please connect your MetaMask wallet first');
+          return;
+        }
+      } catch (error) {
+        setFusionStatus('❌ Please connect your MetaMask wallet first');
         return;
       }
       
@@ -504,12 +638,12 @@ export default function App() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <a href="#" className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent animate-fade-in">Fusion+</a>
-            <nav>
+          <nav>
               <ul className="flex space-x-8">
                 <li><a href="#swap" className="text-gray-700 hover:text-blue-600 transition-colors duration-200 font-medium animate-slide-in-left">Demo</a></li>
                 <li><a href="#explainer" className="text-gray-700 hover:text-blue-600 transition-colors duration-200 font-medium animate-slide-in-right">About</a></li>
-              </ul>
-            </nav>
+            </ul>
+          </nav>
           </div>
         </div>
       </header>
@@ -585,8 +719,8 @@ export default function App() {
                 <svg className="w-6 h-6 mr-3 group-hover:scale-110 transition-transform duration-300" fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M10 0C4.477 0 0 4.484 0 10.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0110 4.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.203 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.942.359.31.678.921.678 1.856 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0020 10.017C20 4.484 15.522 0 10 0z" clipRule="evenodd" />
                 </svg>
-                View on GitHub
-              </a>
+              View on GitHub
+            </a>
               <a 
                 href="#swap" 
                 className="group inline-flex items-center px-10 py-5 rounded-2xl bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 text-white font-bold text-lg shadow-2xl hover:shadow-3xl transition-all duration-300 transform hover:-translate-y-2 hover:scale-105 animate-glow"
@@ -671,82 +805,346 @@ export default function App() {
               } else {
                 handleStart();
               }
-            }}>
-              <div className="mb-6">
-                <label className="form-label">Swap direction</label>
-                <select className="form-select" value={direction} onChange={e => setDirection(e.target.value)}>
-                  {DIRECTIONS.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
-                </select>
-              </div>
-              
-              <div className="mb-6">
-                <label className="form-label">UTXO chain</label>
-                <select className="form-select" value={chain} onChange={e => setChain(e.target.value)}>
-                  {CHAINS.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
-                </select>
-              </div>
-              
-              <div className="mb-6">
-                <label className="form-label">Amount</label>
-                <input className="form-input" type="text" value={amount} onChange={e => setAmount(e.target.value)} placeholder="e.g. 0.01" />
-              </div>
-              
-              <div className="mb-6">
-                <label className="form-label">Recipient address</label>
-                <input className="form-input" type="text" value={recipient} onChange={e => setRecipient(e.target.value)} placeholder={getRecipientPlaceholder()} />
-              </div>
-              
-              {direction === 'btc2eth' && (
-                <div className="mb-6">
-                  <label className="form-label">Change address</label>
-                  <input className="form-input" type="text" value={changeAddress} onChange={e => setChangeAddress(e.target.value)} placeholder="Your BTC/LTC/DOGE/BCH change address" />
-                </div>
-              )}
-              
-              {direction === 'eth2btc' && (
-                <div className="mb-6">
+            }} className="space-y-6 max-w-4xl mx-auto">
+              {/* Live Exchange Rate Section */}
+              <div className="bg-gradient-to-r from-emerald-50 to-teal-50 rounded-2xl p-6 border border-emerald-100">
+                <div className="flex items-center justify-between mb-6">
+                  <div className="flex items-center">
+                    <div className="w-10 h-10 bg-gradient-to-r from-emerald-500 to-teal-500 rounded-xl flex items-center justify-center mr-4">
+                      <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                      </svg>
+                    </div>
+                    <h3 className="text-xl font-bold text-gray-900">Live Exchange Rate</h3>
+                  </div>
                   <button 
-                    type="button" 
-                    onClick={() => setShowAdvanced(v => !v)}
-                    className="text-primary-600 hover:text-primary-700 underline text-sm font-semibold uppercase tracking-wide transition-colors duration-200"
+                    onClick={fetchExchangeRate}
+                    disabled={rateLoading}
+                    className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50"
                   >
-                    {showAdvanced ? 'Hide advanced' : 'Show advanced'}
+                    {rateLoading ? '🔄' : '🔄'}
                   </button>
+                </div>
+                
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  <div className="bg-white/50 rounded-xl p-4 border border-emerald-200">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium text-gray-600">ETH → BTC</span>
+                      <span className="text-xs text-gray-500 truncate ml-2">
+                        {lastRateUpdate ? `Updated ${Math.floor((Date.now() - lastRateUpdate.getTime()) / 1000)}s ago` : 'Never'}
+                      </span>
+                    </div>
+                    <div className="text-lg lg:text-2xl font-bold text-gray-900 break-words">
+                      {exchangeRate ? `1 ETH = ${exchangeRate.toFixed(6)} BTC` : 'Loading...'}
+                    </div>
+                    {rateError && (
+                      <div className="text-orange-600 text-xs mt-1">⚠️ {rateError}</div>
+                    )}
+                  </div>
                   
-                  {showAdvanced && (
-                    <div className="mt-4">
-                      <label className="form-label">ETH HTLC contract address</label>
-                      <input className="form-input" type="text" value={ethContract} onChange={e => setEthContract(e.target.value)} placeholder="0x..." />
-                      <small className="text-gray-600 text-xs block mt-1">
-                        Default: {import.meta.env.VITE_ETH_HTLC_ADDRESS || 'Not set'}
-                      </small>
+                  <div className="bg-white/50 rounded-xl p-4 border border-emerald-200">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium text-gray-600">BTC → ETH</span>
+                      <span className="text-xs text-gray-500 truncate ml-2">
+                        {lastRateUpdate ? `Updated ${Math.floor((Date.now() - lastRateUpdate.getTime()) / 1000)}s ago` : 'Never'}
+                      </span>
+                    </div>
+                    <div className="text-lg lg:text-2xl font-bold text-gray-900 break-words">
+                      {exchangeRate ? `1 BTC = ${(1/exchangeRate).toFixed(2)} ETH` : 'Loading...'}
+                    </div>
+                    {rateError && (
+                      <div className="text-orange-600 text-xs mt-1">⚠️ {rateError}</div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Swap Configuration Section */}
+              <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl p-6 border border-blue-100">
+                <div className="flex items-center mb-6">
+                  <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-xl flex items-center justify-center mr-4">
+                    <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                    </svg>
+                  </div>
+                  <h3 className="text-xl font-bold text-gray-900">Swap Configuration</h3>
+                </div>
+                
+                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  <div>
+                    <label className="form-label flex items-center">
+                      <svg className="w-4 h-4 mr-2 text-blue-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                      </svg>
+                      <span className="truncate">Swap Direction</span>
+                    </label>
+                    <select className="form-select" value={direction} onChange={e => setDirection(e.target.value)}>
+                      {DIRECTIONS.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
+                    </select>
+                  </div>
+                  
+                  <div>
+                    <label className="form-label flex items-center">
+                      <svg className="w-4 h-4 mr-2 text-blue-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                      </svg>
+                      <span className="truncate">UTXO Chain</span>
+                    </label>
+                    <select className="form-select" value={chain} onChange={e => setChain(e.target.value)}>
+                      {CHAINS.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+                    </select>
+                  </div>
+                </div>
+              </div>
+              
+              {/* Amount & Recipient Section */}
+              <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-2xl p-6 border border-green-100">
+                <div className="flex items-center mb-6">
+                  <div className="w-10 h-10 bg-gradient-to-r from-green-500 to-emerald-500 rounded-xl flex items-center justify-center mr-4">
+                    <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
+                    </svg>
+                  </div>
+                  <h3 className="text-xl font-bold text-gray-900">Transaction Details</h3>
+              </div>
+              
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  <div>
+                    <label className="form-label flex items-center">
+                      <svg className="w-4 h-4 mr-2 text-green-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" />
+                      </svg>
+                      <span className="truncate">Amount</span>
+                    </label>
+                    <div className="relative">
+                      <input 
+                        className="form-input pr-12" 
+                        type="text" 
+                        value={amount} 
+                        onChange={e => setAmount(e.target.value)} 
+                        placeholder="e.g. 0.01" 
+                      />
+                      <div className="absolute inset-y-0 right-0 flex items-center pr-3">
+                        <span className="text-gray-500 text-sm font-medium">
+                          {direction === 'eth2btc' ? 'ETH' : chain.toUpperCase()}
+                        </span>
+                      </div>
+                    </div>
+                    {amount && (
+                      <div className="mt-2 text-sm text-gray-600 bg-white/50 rounded-lg p-2">
+                        <div className="flex justify-between items-center mb-1">
+                          <span className="truncate">You'll receive:</span>
+                          <span className="font-semibold ml-2">
+                            {direction === 'eth2btc' 
+                              ? `${calculateAmounts(amount, direction).output} BTC`
+                              : `${calculateAmounts(amount, direction).output} ETH`
+                            }
+                          </span>
+                        </div>
+                        {exchangeRate && (
+                          <div className="flex justify-between items-center text-xs">
+                            <span className="truncate">Rate:</span>
+                            <span className="font-medium ml-2">
+                              {direction === 'eth2btc' 
+                                ? `1 ETH = ${exchangeRate.toFixed(6)} BTC`
+                                : `1 BTC = ${(1/exchangeRate).toFixed(2)} ETH`
+                              }
+                            </span>
+                          </div>
+                        )}
+                        {rateError && (
+                          <div className="text-orange-600 text-xs mt-1">
+                            ⚠️ {rateError}
+                          </div>
+                        )}
+                        {rateLoading && (
+                          <div className="text-blue-600 text-xs mt-1">
+                            🔄 Updating rates...
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  
+                  <div>
+                    <label className="form-label flex items-center">
+                      <svg className="w-4 h-4 mr-2 text-green-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                      </svg>
+                      <span className="truncate">Recipient Address</span>
+                    </label>
+                    <input 
+                      className="form-input" 
+                      type="text" 
+                      value={recipient} 
+                      onChange={e => setRecipient(e.target.value)} 
+                      placeholder={getRecipientPlaceholder()} 
+                    />
+                    {recipient && (
+                      <div className="mt-2 text-sm text-gray-600 bg-white/50 rounded-lg p-2">
+                        <div className="flex items-center">
+                          <div className={`w-2 h-2 rounded-full mr-2 flex-shrink-0 ${recipient.startsWith('0x') ? 'bg-green-500' : 'bg-blue-500'}`}></div>
+                          <span className="truncate">{recipient.startsWith('0x') ? 'Ethereum address' : `${chain.toUpperCase()} address`}</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+              
+              {/* Advanced Settings Section */}
+              <div className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-2xl p-6 border border-purple-100">
+                <div className="flex items-center mb-6">
+                  <div className="w-10 h-10 bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl flex items-center justify-center mr-4">
+                    <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                  </div>
+                  <h3 className="text-xl font-bold text-gray-900">Advanced Settings</h3>
+                </div>
+                
+                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  <div>
+                    <label className="form-label flex items-center">
+                      <svg className="w-4 h-4 mr-2 text-purple-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <span className="truncate">Timelock (seconds)</span>
+                    </label>
+                    <input 
+                      className="form-input" 
+                      type="number" 
+                      value={timelock} 
+                      onChange={e => setTimelock(e.target.value)} 
+                      placeholder="3600" 
+                    />
+                    <div className="mt-2 text-sm text-gray-600 bg-white/50 rounded-lg p-2">
+                      <div className="flex justify-between">
+                        <span className="truncate">Expires in:</span>
+                        <span className="font-semibold ml-2">
+                          {timelock ? `${Math.floor(parseInt(timelock) / 3600)}h ${Math.floor((parseInt(timelock) % 3600) / 60)}m` : '1h 0m'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+              
+                                {direction === 'btc2eth' && (
+                    <div>
+                      <label className="form-label flex items-center">
+                        <svg className="w-4 h-4 mr-2 text-purple-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                        <span className="truncate">Change Address</span>
+                      </label>
+                      <input 
+                        className="form-input" 
+                        type="text" 
+                        value={changeAddress} 
+                        onChange={e => setChangeAddress(e.target.value)} 
+                        placeholder={`Your ${chain.toUpperCase()} change address`} 
+                      />
+                    </div>
+                  )}
+              
+                                {direction === 'eth2btc' && (
+                    <div>
+                      <button 
+                        type="button" 
+                        onClick={() => setShowAdvanced(v => !v)}
+                        className="w-full text-left p-4 bg-white/50 rounded-xl border border-purple-200 hover:bg-white hover:border-purple-300 transition-all duration-200"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center">
+                            <svg className="w-4 h-4 mr-2 text-purple-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+                            </svg>
+                            <span className="font-semibold text-gray-700 truncate">Advanced Options</span>
+                          </div>
+                          <svg className={`w-5 h-5 text-purple-600 transition-transform duration-200 flex-shrink-0 ${showAdvanced ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                          </svg>
+                        </div>
+                      </button>
+                      
+                      {showAdvanced && (
+                        <div className="mt-4 p-4 bg-white/50 rounded-xl border border-purple-200">
+                          <label className="form-label flex items-center">
+                            <svg className="w-4 h-4 mr-2 text-purple-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                            <span className="truncate">ETH HTLC Contract Address</span>
+                          </label>
+                          <input 
+                            className="form-input" 
+                            type="text" 
+                            value={ethContract} 
+                            onChange={e => setEthContract(e.target.value)} 
+                            placeholder="0x..." 
+                          />
+                          <div className="mt-2 text-sm text-gray-600 truncate">
+                            Default: {import.meta.env.VITE_ETH_HTLC_ADDRESS || 'Not set'}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
-              )}
-              
-              <div className="mb-6">
-                <label className="form-label">Timelock (seconds from now)</label>
-                <input className="form-input" type="number" value={timelock} onChange={e => setTimelock(e.target.value)} placeholder="3600" />
               </div>
               
-              <div className="mb-6">
-                <label className="flex items-center gap-2 cursor-pointer">
+              {/* Fusion+ Protocol Section */}
+              <div className="bg-gradient-to-r from-orange-50 to-red-50 rounded-2xl p-6 border border-orange-100">
+                <div className="flex items-center mb-6">
+                  <div className="w-10 h-10 bg-gradient-to-r from-orange-500 to-red-500 rounded-xl flex items-center justify-center mr-4">
+                    <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                  </div>
+                  <h3 className="text-xl font-bold text-gray-900">Fusion+ Protocol</h3>
+              </div>
+              
+                                <div className="flex items-center p-4 bg-white/50 rounded-xl border border-orange-200">
                   <input 
                     type="checkbox" 
                     checked={useFusion} 
                     onChange={e => setUseFusion(e.target.checked)}
-                    className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                    className="w-5 h-5 text-orange-600 border-gray-300 rounded focus:ring-orange-500 mr-4"
                   />
-                  <span className="uppercase tracking-wide text-sm">Use Fusion+ protocol (1inch integration)</span>
-                </label>
-              </div>
+                  <div className="flex-1">
+                    <div className="font-semibold text-gray-900">Enable Fusion+ Protocol</div>
+                    <div className="text-sm text-gray-600">Advanced order matching and partial fills for cross-chain swaps</div>
+                  </div>
+                  <div className="flex items-center ml-4">
+                    {provider && signer ? (
+                      <div className="flex items-center text-green-600">
+                        <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <span className="text-xs font-medium">Wallet Connected</span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center text-orange-600">
+                        <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                        </svg>
+                        <span className="text-xs font-medium">Wallet Required</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
               
               {useFusion && (
-                <div className="message info mb-6">
-                  <h4 className="font-semibold mb-4">Fusion+ configuration</h4>
-                  <div className="mb-4">
-                    <label className="form-label">Fusion+ HTLC contract address</label>
+                  <div className="mt-6 p-6 bg-white/50 rounded-xl border border-orange-200">
+                    <h4 className="font-semibold mb-4 text-gray-900">Fusion+ Configuration</h4>
+                    <div className="mb-4">
+                      <label className="form-label flex items-center">
+                        <svg className="w-4 h-4 mr-2 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                        Fusion+ HTLC Contract Address
+                      </label>
                     <input 
                       className="form-input" 
                       type="text" 
@@ -755,28 +1153,59 @@ export default function App() {
                       placeholder="0x..." 
                     />
                   </div>
-                  <div className="mt-4">
-                    <button 
-                      type="button" 
-                      onClick={loadAvailableOrders}
-                      className="btn btn-secondary"
-                    >
-                      Browse available orders
-                    </button>
-                  </div>
-                  <div className="mt-2 text-sm text-gray-600">
-                    Fusion+ enables order matching and partial fills for cross-chain swaps
-                  </div>
+                                        <div className="flex gap-3">
+                      <button 
+                        type="button" 
+                        onClick={loadAvailableOrders}
+                        disabled={!provider || !signer}
+                        className={`btn ${provider && signer ? 'btn-secondary' : 'btn-secondary opacity-50 cursor-not-allowed'}`}
+                      >
+                        <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                        </svg>
+                        {provider && signer ? 'Browse Orders' : 'Connect Wallet First'}
+                      </button>
+                      <div className="text-sm text-gray-600 flex items-center">
+                        {provider && signer ? (
+                          <>
+                            <svg className="w-4 h-4 mr-1 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            Order matching enabled
+                          </>
+                        ) : (
+                          <>
+                            <svg className="w-4 h-4 mr-1 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                            </svg>
+                            Wallet required
+                          </>
+                        )}
+                      </div>
+                    </div>
                 </div>
               )}
+              </div>
               
+              {/* Submit Button */}
+              <div className="flex justify-center">
               <button 
                 type="submit" 
-                className="btn btn-primary btn-large btn-full"
+                  className="group relative inline-flex items-center px-12 py-6 rounded-2xl bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 text-white font-bold text-lg shadow-2xl hover:shadow-3xl transition-all duration-300 transform hover:-translate-y-1 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
                 disabled={!amount || !recipient || !timelock || (direction==='eth2btc' && !ethAddress) || (direction==='btc2eth' && !utxoAddress)}
               >
-                {useFusion ? 'Create Fusion+ order' : 'Start swap'}
+                  <div className="absolute inset-0 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 rounded-2xl blur opacity-75 group-hover:opacity-100 transition-opacity duration-300"></div>
+                  <div className="relative flex items-center">
+                    <svg className="w-6 h-6 mr-3 group-hover:scale-110 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                    {useFusion ? 'Create Fusion+ Order' : 'Start Swap'}
+                    <svg className="w-6 h-6 ml-3 group-hover:translate-x-1 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                    </svg>
+                  </div>
               </button>
+              </div>
             </form>
             
             {showOrderList && availableOrders.length > 0 && (
@@ -789,6 +1218,11 @@ export default function App() {
                       <div><strong>Direction:</strong> {order.makerAsset} → {order.takerAsset}</div>
                       <div><strong>Amount:</strong> {order.makerAmount} {order.makerAsset} → {order.takerAmount} {order.takerAsset}</div>
                       <div><strong>Rate:</strong> 1 {order.makerAsset} = {(parseFloat(order.takerAmount) / parseFloat(order.makerAmount)).toFixed(6)} {order.takerAsset}</div>
+                      {exchangeRate && (
+                        <div className="text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded mt-1">
+                          Market: 1 {order.makerAsset} = {order.makerAsset === 'ETH' ? exchangeRate.toFixed(6) : (1/exchangeRate).toFixed(2)} {order.takerAsset}
+                        </div>
+                      )}
                       <div><strong>Status:</strong> {order.status}</div>
                       <div><strong>Maker:</strong> <code className="bg-gray-100 px-2 py-1 rounded text-sm text-xs">{order.maker?.slice(0, 10)}...{order.maker?.slice(-8)}</code></div>
                       <button 
@@ -822,6 +1256,11 @@ export default function App() {
                 <div><strong>Direction:</strong> {selectedOrder.makerAsset} → {selectedOrder.takerAsset}</div>
                 <div><strong>Amount:</strong> {selectedOrder.makerAmount} {selectedOrder.makerAsset} → {selectedOrder.takerAmount} {selectedOrder.takerAsset}</div>
                 <div><strong>Rate:</strong> 1 {selectedOrder.makerAsset} = {(parseFloat(selectedOrder.takerAmount) / parseFloat(selectedOrder.makerAmount)).toFixed(6)} {selectedOrder.takerAsset}</div>
+                {exchangeRate && (
+                  <div className="text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded mt-1">
+                    Market: 1 {selectedOrder.makerAsset} = {selectedOrder.makerAsset === 'ETH' ? exchangeRate.toFixed(6) : (1/exchangeRate).toFixed(2)} {selectedOrder.takerAsset}
+                  </div>
+                )}
                 <div><strong>Status:</strong> {selectedOrder.status}</div>
                 <div><strong>Maker Address:</strong> <code className="bg-white px-2 py-1 rounded text-sm">{selectedOrder.maker}</code></div>
                 <div><strong>Timelock:</strong> {new Date(selectedOrder.timelock).toLocaleString()}</div>
