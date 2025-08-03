@@ -14,10 +14,10 @@ export default defineConfig({
   },
   optimizeDeps: {
     include: [
-      'buffer', 
-      'events', 
-      'util', 
-      'stream-browserify', 
+      'buffer',
+      'events',
+      'util',
+      'stream-browserify',
       'crypto-browserify'
     ],
   },
@@ -35,4 +35,14 @@ export default defineConfig({
       '/api': 'http://localhost:3000',
     },
   },
+preview: {
+    host: '0.0.0.0',
+    port: 3000,
+    allowedHosts: [
+      'localhost',
+      '127.0.0.1',
+      'swap.virajbhartiya.com',
+      '.virajbhartiya.com'  // This allows all subdomains
+    ]
+  }
 });
