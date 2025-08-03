@@ -13,8 +13,13 @@ export default defineConfig({
     },
   },
   optimizeDeps: {
-    include: ['buffer', 'events', 'util', 'stream-browserify', 'crypto-browserify'],
-    exclude: ['bitcoinjs-lib'],
+    include: [
+      'buffer', 
+      'events', 
+      'util', 
+      'stream-browserify', 
+      'crypto-browserify'
+    ],
   },
   define: {
     'global': 'window',

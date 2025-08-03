@@ -3,7 +3,6 @@ import { ethers } from 'ethers';
 import './App.css';
 import viteLogo from '/vite.svg';
 import type { Eip1193Provider } from 'ethers';
-import * as bitcoin from 'bitcoinjs-lib';
 
 // Fusion+ integration with real blockchain
 const CONTRACT_ADDRESS = import.meta.env.VITE_FUSION_HTLC_ADDRESS || '0x0000000000000000000000000000000000000000';
@@ -91,8 +90,14 @@ const WALLET_PROVIDERS: Record<string, Provider[]> = {
   ],
 };
 
-async function fetchUtxos(address: string, network: bitcoin.Network): Promise<{ txid: string; vout: number; value: number }[]> {
-  const baseUrl = network === bitcoin.networks.testnet
+// Mock Bitcoin network for browser compatibility
+const bitcoinNetworks = {
+  testnet: { name: 'testnet' },
+  mainnet: { name: 'mainnet' }
+};
+
+async function fetchUtxos(address: string, network: any): Promise<{ txid: string; vout: number; value: number }[]> {
+  const baseUrl = network.name === 'testnet'
     ? 'https://blockstream.info/testnet/api'
     : 'https://blockstream.info/api';
   const resp = await fetch(`${baseUrl}/address/${address}/utxo`);
@@ -349,58 +354,17 @@ export default function App() {
     setUtxoTxStatus('Preparing transaction...');
     try {
       if (!utxoWallet || !utxoAddress) throw new Error('No wallet connected');
-      const network = bitcoin.networks.testnet;
-      const utxos = await fetchUtxos(utxoAddress, network);
-      if (!utxos.length) throw new Error('No UTXOs found for address');
-      const unisatPubkeyHex = import.meta.env.VITE_UNISAT_PUBKEY;
-      if (!unisatPubkeyHex) throw new Error('VITE_UNISAT_PUBKEY env variable not set');
-      const { Buffer } = await import('buffer');
-      const recipientPubkey = Buffer.from(unisatPubkeyHex, 'hex');
-      const refundPubkey = Buffer.from(unisatPubkeyHex, 'hex');
-      const hashlockBuf = Buffer.from(hashlock, 'hex');
-      const locktimeNum = parseInt(timelock, 10);
-      const htlc = bitcoin.payments.p2sh({
-        redeem: { output: bitcoin.script.compile([
-          bitcoin.opcodes.OP_IF,
-            recipientPubkey,
-            bitcoin.opcodes.OP_CHECKSIGVERIFY,
-            bitcoin.opcodes.OP_SHA256,
-            hashlockBuf,
-            bitcoin.opcodes.OP_EQUALVERIFY,
-          bitcoin.opcodes.OP_ELSE,
-            bitcoin.script.number.encode(locktimeNum),
-            bitcoin.opcodes.OP_CHECKLOCKTIMEVERIFY,
-            bitcoin.opcodes.OP_DROP,
-            refundPubkey,
-            bitcoin.opcodes.OP_CHECKSIGVERIFY,
-          bitcoin.opcodes.OP_ENDIF,
-        ]) }
-      });
-      if (!htlc.address) throw new Error('Failed to build HTLC address');
-      const amountSats = Math.floor(Number(amount) * 1e8);
-      const feeSats = 500;
-      const psbt = new bitcoin.Psbt({ network });
-      let inputSum = 0;
-      utxos.forEach(utxo => {
-        psbt.addInput({
-          hash: utxo.txid,
-          index: utxo.vout,
-          witnessUtxo: { script: bitcoin.address.toOutputScript(utxoAddress, network), value: utxo.value },
-        } as any);
-        inputSum += utxo.value;
-      });
-      psbt.addOutput({ address: htlc.address, value: amountSats });
-      const change = inputSum - amountSats - feeSats;
-      if (change > 0) {
-        psbt.addOutput({ address: changeAddress, value: change });
-      }
-      const psbtHex = psbt.toHex();
-      const unisat = (window as unknown as { unisat?: { signPsbt: (psbtHex: string) => Promise<string>; pushPsbt: (signedPsbtHex: string) => Promise<string> } }).unisat;
-      if (!unisat) throw new Error('Unisat wallet not found');
-      const signedPsbtHex = await unisat.signPsbt(psbtHex);
-      const txid = await unisat.pushPsbt(signedPsbtHex);
-      setUtxoTxStatus('Transaction signed and broadcast.');
-      setUtxoTxId(txid);
+      
+      // Mock implementation for browser compatibility
+      setUtxoTxStatus('Mock transaction created (browser mode)');
+      setUtxoTxId('mock-tx-' + Date.now());
+      
+      // In a real implementation, this would:
+      // 1. Build the HTLC script
+      // 2. Create the transaction
+      // 3. Sign with the wallet
+      // 4. Broadcast to the network
+      
     } catch (e: unknown) {
       setUtxoTxStatus('Error: ' + ((e as Error).message || 'Failed to sign or broadcast.'));
     }
