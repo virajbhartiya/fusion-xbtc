@@ -108,6 +108,7 @@ export default function App() {
   const [orderLoading, setOrderLoading] = useState(false);
   const [orderMatching, setOrderMatching] = useState(false);
   const [orderSelecting, setOrderSelecting] = useState(false);
+  const [matchTxHash, setMatchTxHash] = useState<string>('');
 
   useEffect(() => { ensureBuffer(); }, []);
 
@@ -392,7 +393,7 @@ export default function App() {
     try {
       const orderId = ethers.keccak256(ethers.toUtf8Bytes(`fusion-${Date.now()}-${Math.random()}`));
       const secret = crypto.getRandomValues(new Uint8Array(32));
-      const hashlock = ethers.keccak256(secret);
+      const hashlock = ethers.sha256(secret);
       const timelockSeconds = timelock ? parseInt(timelock) : 3600; // Default to 1 hour if not set
       const orderTimelock = Math.floor(Date.now() / 1000) + timelockSeconds;
       
@@ -534,6 +535,30 @@ export default function App() {
           const order = await contract.getFusionOrder(orderId);
           const isActive = await contract.isOrderActive(orderId);
           
+          // Try to get additional order data from localStorage
+          const storedOrderData = localStorage.getItem(`order_${orderId}`);
+          let txHash = '';
+          let matchTxHash = '';
+          if (storedOrderData) {
+            try {
+              const parsed = JSON.parse(storedOrderData);
+              txHash = parsed.txHash || '';
+            } catch (error) {
+              console.error('Error parsing stored order data:', error);
+            }
+          }
+          
+          // Try to get match transaction data from localStorage
+          const matchData = localStorage.getItem(`match_${orderId}`);
+          if (matchData) {
+            try {
+              const parsed = JSON.parse(matchData);
+              matchTxHash = parsed.matchTxHash || '';
+            } catch (error) {
+              console.error('Error parsing match data:', error);
+            }
+          }
+          
           activeOrders.push({
             orderId: order[0],
             maker: order[1],
@@ -546,7 +571,9 @@ export default function App() {
             isActive: order[8],
             isMatched: order[9],
             createdAt: new Date(Number(order[10]) * 1000).toISOString(),
-            status: isActive ? 'active' : 'inactive'
+            status: order[9] ? 'completed' : (isActive ? 'active' : 'inactive'),
+            txHash: txHash,
+            matchTxHash: matchTxHash
           });
         } catch (error) {
           console.error(`Error fetching order ${orderId}:`, error);
@@ -594,6 +621,30 @@ export default function App() {
       const order = await contract.getFusionOrder(orderId);
       const isActive = await contract.isOrderActive(orderId);
       
+      // Try to get additional order data from localStorage
+      const storedOrderData = localStorage.getItem(`order_${orderId}`);
+      let txHash = '';
+      let matchTxHash = '';
+      if (storedOrderData) {
+        try {
+          const parsed = JSON.parse(storedOrderData);
+          txHash = parsed.txHash || '';
+        } catch (error) {
+          console.error('Error parsing stored order data:', error);
+        }
+      }
+      
+      // Try to get match transaction data from localStorage
+      const matchData = localStorage.getItem(`match_${orderId}`);
+      if (matchData) {
+        try {
+          const parsed = JSON.parse(matchData);
+          matchTxHash = parsed.matchTxHash || '';
+        } catch (error) {
+          console.error('Error parsing match data:', error);
+        }
+      }
+      
       const orderData = {
         orderId: order[0],
         maker: order[1],
@@ -606,7 +657,9 @@ export default function App() {
         isActive: order[8],
         isMatched: order[9],
         createdAt: new Date(Number(order[10]) * 1000).toISOString(),
-        status: isActive ? 'active' : 'inactive'
+        status: isActive ? 'active' : 'inactive',
+        txHash: txHash,
+        matchTxHash: matchTxHash
       };
       
       console.log('Order selected from blockchain:', orderData);
@@ -656,6 +709,17 @@ export default function App() {
     setOrderMatching(true);
     try {
       console.log('Matching order:', selectedOrder.orderId, 'with secret:', secret);
+      console.log('Secret length:', secret.length);
+      console.log('Selected order hashlock:', selectedOrder.hashlock);
+      
+      // Verify the secret matches the hashlock
+      // Convert hex string secret back to Uint8Array for consistent hashing
+      const secretBytes = new Uint8Array(secret.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)));
+      // Use SHA256 to match the contract's hashlock computation
+      const testHashlock = ethers.sha256(secretBytes);
+      console.log('Computed hashlock from secret:', testHashlock);
+      console.log('Order hashlock:', selectedOrder.hashlock);
+      console.log('Hashlocks match:', testHashlock === selectedOrder.hashlock);
       
       const contract = new ethers.Contract(
         CONTRACT_ADDRESS,
@@ -673,15 +737,33 @@ export default function App() {
       // Call the smart contract to match the order
       const tx = await contract.matchFusionOrder(
         selectedOrder.orderId,
-        `0x${secret}`,
+        secretBytes,
         { value: takerAmount }
       );
 
       setFusionStatus('Waiting for transaction confirmation...');
       const receipt = await tx.wait();
       
+      setMatchTxHash(tx.hash);
       setFusionStatus(`✅ Order matched successfully! Transaction: ${tx.hash}`);
       console.log('Order match result:', { txHash: tx.hash, blockNumber: receipt.blockNumber });
+      
+      // Store the match transaction hash in localStorage
+      const matchData = {
+        orderId: selectedOrder.orderId,
+        matchTxHash: tx.hash,
+        matchBlockNumber: receipt.blockNumber,
+        matchedAt: new Date().toISOString()
+      };
+      localStorage.setItem(`match_${selectedOrder.orderId}`, JSON.stringify(matchData));
+      
+      // Unselect the order and clear selection state
+      setSelectedOrder(null);
+      setFusionOrderId('');
+      setSecret('');
+      
+      // Reload available orders to reflect the completed order
+      await loadAvailableOrders();
     } catch (error) {
       console.error('Error matching order:', error);
       setFusionStatus(`❌ Error: ${(error as Error).message}`);
@@ -1383,12 +1465,56 @@ export default function App() {
                           Market: 1 {order.makerAsset} = {order.makerAsset === 'ETH' ? exchangeRate.toFixed(6) : (1/exchangeRate).toFixed(2)} {order.takerAsset}
                         </div>
                       )}
-                      <div><strong>Status:</strong> {order.status}</div>
+                      <div><strong>Status:</strong> 
+                        <span className={`ml-2 px-2 py-1 rounded text-xs font-medium ${
+                          order.status === 'completed' 
+                            ? 'bg-green-100 text-green-800' 
+                            : order.status === 'active' 
+                            ? 'bg-blue-100 text-blue-800' 
+                            : 'bg-gray-100 text-gray-800'
+                        }`}>
+                          {order.status === 'completed' ? '✅ Completed' : order.status}
+                        </span>
+                      </div>
                       <div><strong>Maker:</strong> <code className="bg-gray-100 px-2 py-1 rounded text-sm">{order.maker?.slice(0, 10)}...{order.maker?.slice(-8)}</code></div>
+                      {order.txHash && (
+                        <div><strong>Creation Transaction:</strong> 
+                          <code className="bg-gray-100 px-2 py-1 rounded text-sm ml-2">{order.txHash.slice(0, 10)}...{order.txHash.slice(-8)}</code>
+                          <div className="mt-1">
+                            <a 
+                              href={`https://sepolia.etherscan.io/tx/${order.txHash}`} 
+                              target="_blank" 
+                              rel="noopener noreferrer" 
+                              className="btn btn-secondary inline-block px-2 py-1 text-xs"
+                            >
+                              View on Etherscan
+                            </a>
+                          </div>
+                        </div>
+                      )}
+                      {order.matchTxHash && (
+                        <div><strong>Match Transaction:</strong> 
+                          <code className="bg-gray-100 px-2 py-1 rounded text-sm ml-2">{order.matchTxHash.slice(0, 10)}...{order.matchTxHash.slice(-8)}</code>
+                          <div className="mt-1">
+                            <a 
+                              href={`https://sepolia.etherscan.io/tx/${order.matchTxHash}`} 
+                              target="_blank" 
+                              rel="noopener noreferrer" 
+                              className="btn btn-secondary inline-block px-2 py-1 text-xs"
+                            >
+                              View on Etherscan
+                            </a>
+                          </div>
+                        </div>
+                      )}
                       <button 
                         onClick={() => selectOrder(order.orderId)}
-                        className="btn btn-primary mt-2 px-4 py-2 text-sm"
-                        disabled={orderSelecting}
+                        className={`btn mt-2 px-4 py-2 text-sm ${
+                          order.status === 'completed' 
+                            ? 'btn-secondary opacity-50 cursor-not-allowed' 
+                            : 'btn-primary'
+                        }`}
+                        disabled={orderSelecting || order.status === 'completed'}
                       >
                         {orderSelecting ? (
                           <>
@@ -1398,6 +1524,8 @@ export default function App() {
                             </svg>
                             Selecting...
                           </>
+                        ) : order.status === 'completed' ? (
+                          'Order completed'
                         ) : (
                           'Select order'
                         )}
@@ -1432,15 +1560,46 @@ export default function App() {
                     Market: 1 {selectedOrder.makerAsset} = {selectedOrder.makerAsset === 'ETH' ? exchangeRate.toFixed(6) : (1/exchangeRate).toFixed(2)} {selectedOrder.takerAsset}
                   </div>
                 )}
-                <div><strong>Status:</strong> {selectedOrder.status}</div>
+                <div><strong>Status:</strong> 
+                  <span className={`ml-2 px-2 py-1 rounded text-xs font-medium ${
+                    selectedOrder.status === 'completed' 
+                      ? 'bg-green-100 text-green-800' 
+                      : selectedOrder.status === 'active' 
+                      ? 'bg-blue-100 text-blue-800' 
+                      : 'bg-gray-100 text-gray-800'
+                  }`}>
+                    {selectedOrder.status === 'completed' ? '✅ Completed' : selectedOrder.status}
+                  </span>
+                </div>
                 <div><strong>Maker Address:</strong> <code className="bg-white px-2 py-1 rounded text-sm">{selectedOrder.maker}</code></div>
                 <div><strong>Timelock:</strong> {new Date(selectedOrder.timelock).toLocaleString()}</div>
                 <div><strong>Created:</strong> {new Date(selectedOrder.createdAt).toLocaleString()}</div>
+                {selectedOrder.txHash && (
+                  <div><strong>Creation Transaction:</strong> 
+                    <code className="bg-white px-2 py-1 rounded text-sm ml-2">{selectedOrder.txHash}</code>
+                    <div className="mt-1">
+                      <a 
+                        href={`https://sepolia.etherscan.io/tx/${selectedOrder.txHash}`} 
+                        target="_blank" 
+                        rel="noopener noreferrer" 
+                        className="btn btn-secondary inline-block px-2 py-1 text-xs"
+                      >
+                        View on Etherscan
+                      </a>
+                    </div>
+                  </div>
+                )}
                 <div className="mt-4">
                   <button 
                     onClick={() => matchSelectedOrder()}
-                    className={`btn mr-2 ${secret ? 'btn-primary' : 'btn-secondary opacity-50 cursor-not-allowed'}`}
-                    disabled={orderMatching || !secret}
+                    className={`btn mr-2 ${
+                      selectedOrder.status === 'completed' 
+                        ? 'btn-secondary opacity-50 cursor-not-allowed' 
+                        : secret 
+                        ? 'btn-primary' 
+                        : 'btn-secondary opacity-50 cursor-not-allowed'
+                    }`}
+                    disabled={orderMatching || !secret || selectedOrder.status === 'completed'}
                   >
                     {orderMatching ? (
                       <>
@@ -1450,6 +1609,8 @@ export default function App() {
                         </svg>
                         Matching...
                       </>
+                    ) : selectedOrder.status === 'completed' ? (
+                      'Order already completed'
                     ) : secret ? (
                       'Match this order'
                     ) : (
@@ -1512,6 +1673,21 @@ export default function App() {
                     <h4 className="font-semibold mb-4">Fusion+ order</h4>
                     <div><strong>Order ID:</strong> <code className="bg-white px-2 py-1 rounded text-sm">{fusionOrderId}</code></div>
                     <div><strong>Status:</strong> {fusionStatus}</div>
+                    {matchTxHash && (
+                      <div className="mt-2">
+                        <strong>Match Transaction Hash:</strong> <code className="bg-white px-2 py-1 rounded text-sm">{matchTxHash}</code>
+                        <div className="mt-2">
+                          <a 
+                            href={`https://sepolia.etherscan.io/tx/${matchTxHash}`} 
+                            target="_blank" 
+                            rel="noopener noreferrer" 
+                            className="btn btn-secondary inline-block px-4 py-2 text-sm"
+                          >
+                            View on Etherscan
+                          </a>
+                        </div>
+                      </div>
+                    )}
                     {log && typeof log === 'object' && 'txHash' in log && typeof log.txHash === 'string' && (
                       <div className="mt-2">
                         <strong>Transaction Hash:</strong> <code className="bg-white px-2 py-1 rounded text-sm">{log.txHash}</code>
@@ -1640,7 +1816,7 @@ export default function App() {
             <span className="w-2 h-2 bg-blue-400 rounded-full mr-2 animate-pulse"></span>
             Built for ETHGlobal
           </div>
-          <p className="text-xl mb-6 font-medium">Designed for people who care about UX.</p>
+          
           <a href="https://github.com/virajbhartiya/fusion-xbtc" target="_blank" rel="noopener noreferrer" className="inline-flex items-center text-blue-300 hover:text-blue-200 underline transition-colors duration-200 font-medium">
             <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
               <path fillRule="evenodd" d="M10 0C4.477 0 0 4.484 0 10.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0110 4.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.203 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.942.359.31.678.921.678 1.856 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0020 10.017C20 4.484 15.522 0 10 0z" clipRule="evenodd" />
