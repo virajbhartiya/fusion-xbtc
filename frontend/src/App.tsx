@@ -101,6 +101,14 @@ export default function App() {
   const [rateError, setRateError] = useState<string | null>(null);
   const [lastRateUpdate, setLastRateUpdate] = useState<Date | null>(null);
 
+  // Loading states
+  const [walletConnecting, setWalletConnecting] = useState(false);
+  const [utxoWalletConnecting, setUtxoWalletConnecting] = useState(false);
+  const [orderCreating, setOrderCreating] = useState(false);
+  const [orderLoading, setOrderLoading] = useState(false);
+  const [orderMatching, setOrderMatching] = useState(false);
+  const [orderSelecting, setOrderSelecting] = useState(false);
+
   useEffect(() => { ensureBuffer(); }, []);
 
   // Exchange rate functions
@@ -230,10 +238,11 @@ export default function App() {
       setWalletError('MetaMask not detected. Please install MetaMask.');
       return;
     }
+    setWalletConnecting(true);
+    setWalletError('');
     try {
       const accounts: string[] = await eth.request({ method: 'eth_requestAccounts' });
       setEthAddress(accounts[0]);
-      setWalletError('');
       
       const browserProvider = new ethers.BrowserProvider(eth);
       const jsonRpcSigner = await browserProvider.getSigner();
@@ -241,10 +250,13 @@ export default function App() {
       setSigner(jsonRpcSigner);
     } catch {
       setWalletError('Wallet connection failed.');
+    } finally {
+      setWalletConnecting(false);
     }
   }
 
   async function connectUtxoWallet() {
+    setUtxoWalletConnecting(true);
     setUtxoWalletError('');
     await new Promise(res => setTimeout(res, 150));
     const providers = WALLET_PROVIDERS[chain] || [];
@@ -267,10 +279,12 @@ export default function App() {
         } catch {
           setUtxoWalletError('Wallet connection failed. Make sure your wallet is unlocked and the site is allowed.');
         }
+        setUtxoWalletConnecting(false);
         return;
       }
     }
     setUtxoWalletError('No compatible wallet found for this chain. Make sure your wallet is installed, unlocked, and the site is allowed.');
+    setUtxoWalletConnecting(false);
   }
 
   function handleStart() {
@@ -373,6 +387,7 @@ export default function App() {
       return;
     }
 
+    setOrderCreating(true);
     setFusionStatus('Creating Fusion+ order on blockchain...');
     try {
       const orderId = ethers.keccak256(ethers.toUtf8Bytes(`fusion-${Date.now()}-${Math.random()}`));
@@ -459,9 +474,14 @@ export default function App() {
       
       localStorage.setItem(`order_${orderId}`, JSON.stringify(orderData));
       
+      // Also store the secret separately for easy access
+      localStorage.setItem(`secret_${orderId}`, Array.from(secret).map(b => b.toString(16).padStart(2, '0')).join(''));
+      
     } catch (error) {
       console.error('Error creating Fusion+ order:', error);
       setFusionStatus(`❌ Error: ${(error as Error).message}`);
+    } finally {
+      setOrderCreating(false);
     }
   }
 
@@ -493,6 +513,7 @@ export default function App() {
         return;
       }
       
+      setOrderLoading(true);
       setFusionStatus('Loading orders from blockchain...');
       
       const contract = new ethers.Contract(
@@ -540,6 +561,8 @@ export default function App() {
     } catch (error) {
       console.error('Error loading orders:', error);
       setFusionStatus(`❌ Error loading orders: ${(error as Error).message}`);
+    } finally {
+      setOrderLoading(false);
     }
   }
 
@@ -556,6 +579,8 @@ export default function App() {
         setFusionStatus('❌ Contract address not configured');
         return;
       }
+      
+      setOrderSelecting(true);
       
       const contract = new ethers.Contract(
         CONTRACT_ADDRESS,
@@ -589,41 +614,74 @@ export default function App() {
       setFusionOrderId(orderData.orderId);
       setFusionStatus(`Selected order: ${orderData.status}`);
       setSelectionMessage(`✅ Order ${orderData.orderId} selected successfully!`);
+      
+      // Try to get the secret from localStorage (if this is our order)
+      const storedSecret = localStorage.getItem(`secret_${orderId}`);
+      if (storedSecret) {
+        setSecret(storedSecret);
+        console.log('Retrieved secret from localStorage for order:', orderId);
+      } else {
+        // Generate a new secret for matching this order (if we're the taker)
+        generateSecret();
+        console.log('Generated new secret for matching order:', orderId);
+      }
+      
       console.log('Order selection complete - fusionOrderId:', orderData.orderId, 'fusionStatus:', `Selected order: ${orderData.status}`);
       
       setTimeout(() => setSelectionMessage(''), 3000);
     } catch (error) {
       console.error('Error selecting order:', error);
       setFusionStatus(`❌ Error selecting order: ${(error as Error).message}`);
+    } finally {
+      setOrderSelecting(false);
     }
   }
 
   async function matchSelectedOrder() {
-    if (!selectedOrder || !secret) {
-      console.log('Cannot match order - missing selectedOrder or secret:', { selectedOrder: !!selectedOrder, secret: !!secret });
+    if (!selectedOrder || !secret || !provider || !signer) {
+      console.log('Cannot match order - missing selectedOrder, secret, provider, or signer:', { 
+        selectedOrder: !!selectedOrder, 
+        secret: !!secret, 
+        provider: !!provider, 
+        signer: !!signer 
+      });
       return;
     }
     
+    setOrderMatching(true);
     try {
       console.log('Matching order:', selectedOrder.orderId, 'with secret:', secret);
-      const response = await fetch('/api/fusion', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'execute-order',
-          orderId: selectedOrder.orderId,
-          secret: secret
-        })
-      });
-
-      if (!response.ok) throw new Error('Failed to match order');
       
-      const result = await response.json();
-      console.log('Order match result:', result);
-      setFusionStatus(`Order matched: ${result.success ? 'Success' : 'Failed'}`);
+      const contract = new ethers.Contract(
+        CONTRACT_ADDRESS,
+        [
+          "function matchFusionOrder(bytes32 orderId, bytes32 secret) external payable",
+          "function getFusionOrder(bytes32 orderId) external view returns (bytes32, address, string, string, uint256, uint256, uint256, bytes32, bool, bool, uint256)",
+        ],
+        signer
+      );
+
+      // Get the order details to know how much ETH to send
+      const order = await contract.getFusionOrder(selectedOrder.orderId);
+      const takerAmount = order[5]; // takerAmount is the 6th element
+
+      // Call the smart contract to match the order
+      const tx = await contract.matchFusionOrder(
+        selectedOrder.orderId,
+        `0x${secret}`,
+        { value: takerAmount }
+      );
+
+      setFusionStatus('Waiting for transaction confirmation...');
+      const receipt = await tx.wait();
+      
+      setFusionStatus(`✅ Order matched successfully! Transaction: ${tx.hash}`);
+      console.log('Order match result:', { txHash: tx.hash, blockNumber: receipt.blockNumber });
     } catch (error) {
       console.error('Error matching order:', error);
-      setFusionStatus(`Error: ${(error as Error).message}`);
+      setFusionStatus(`❌ Error: ${(error as Error).message}`);
+    } finally {
+      setOrderMatching(false);
     }
   }
 
@@ -784,8 +842,19 @@ export default function App() {
                     type="button" 
                     className="btn btn-secondary btn-full" 
                     onClick={connectWallet}
+                    disabled={walletConnecting}
                   >
-                    Connect MetaMask
+                    {walletConnecting ? (
+                      <>
+                        <svg className="animate-spin -ml-1 mr-3 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Connecting...
+                      </>
+                    ) : (
+                      'Connect MetaMask'
+                    )}
                   </button>
                 )}
                 {walletError && <div className="message error">{walletError}</div>}
@@ -804,8 +873,19 @@ export default function App() {
                     type="button" 
                     className="btn btn-secondary btn-full" 
                     onClick={connectUtxoWallet}
+                    disabled={utxoWalletConnecting}
                   >
-                    Connect {utxoWallet || 'wallet'}
+                    {utxoWalletConnecting ? (
+                      <>
+                        <svg className="animate-spin -ml-1 mr-3 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Connecting...
+                      </>
+                    ) : (
+                      `Connect ${utxoWallet || 'wallet'}`
+                    )}
                   </button>
                 )}
                 {utxoWalletError && <div className="message error">{utxoWalletError}</div>}
@@ -1208,13 +1288,25 @@ export default function App() {
                     <button 
                       type="button" 
                       onClick={loadAvailableOrders}
-                        disabled={!provider || !signer}
-                        className={`btn ${provider && signer ? 'btn-secondary' : 'btn-secondary opacity-50 cursor-not-allowed'}`}
+                        disabled={!provider || !signer || orderLoading}
+                        className={`btn ${provider && signer && !orderLoading ? 'btn-secondary' : 'btn-secondary opacity-50 cursor-not-allowed'}`}
                     >
-                        <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
-                        </svg>
-                        {provider && signer ? 'Browse Orders' : 'Connect Wallet First'}
+                        {orderLoading ? (
+                          <>
+                            <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            Loading...
+                          </>
+                        ) : (
+                          <>
+                            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                            </svg>
+                            {provider && signer ? 'Browse Orders' : 'Connect Wallet First'}
+                          </>
+                        )}
                     </button>
                       <div className="text-sm text-gray-600 flex items-center">
                         {provider && signer ? (
@@ -1243,17 +1335,29 @@ export default function App() {
               <button 
                 type="submit" 
                   className="group relative inline-flex items-center px-12 py-6 rounded-2xl bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 text-white font-bold text-lg shadow-2xl hover:shadow-3xl transition-all duration-300 transform hover:-translate-y-1 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
-                disabled={!amount || !recipient || !timelock || (direction==='eth2btc' && !ethAddress) || (direction==='btc2eth' && !utxoAddress)}
+                disabled={!amount || !recipient || !timelock || (direction==='eth2btc' && !ethAddress) || (direction==='btc2eth' && !utxoAddress) || orderCreating}
               >
                   <div className="absolute inset-0 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 rounded-2xl blur opacity-75 group-hover:opacity-100 transition-opacity duration-300"></div>
                   <div className="relative flex items-center">
                     <svg className="w-6 h-6 mr-3 group-hover:scale-110 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                     </svg>
-                    {useFusion ? 'Create Fusion+ Order' : 'Start Swap'}
-                    <svg className="w-6 h-6 ml-3 group-hover:translate-x-1 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                    </svg>
+                    {orderCreating ? (
+                      <>
+                        <svg className="animate-spin -ml-1 mr-3 h-6 w-6 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Creating Order...
+                      </>
+                    ) : (
+                      <>
+                        {useFusion ? 'Create Fusion+ Order' : 'Start Swap'}
+                        <svg className="w-6 h-6 ml-3 group-hover:translate-x-1 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                        </svg>
+                      </>
+                    )}
                   </div>
               </button>
               </div>
@@ -1279,8 +1383,19 @@ export default function App() {
                       <button 
                         onClick={() => selectOrder(order.orderId)}
                         className="btn btn-primary mt-2 px-4 py-2 text-sm"
+                        disabled={orderSelecting}
                       >
-                        Select order
+                        {orderSelecting ? (
+                          <>
+                            <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            Selecting...
+                          </>
+                        ) : (
+                          'Select order'
+                        )}
                       </button>
                     </div>
                   ))}
@@ -1320,8 +1435,19 @@ export default function App() {
                   <button 
                     onClick={() => matchSelectedOrder()}
                     className="btn btn-primary mr-2"
+                    disabled={orderMatching}
                   >
-                    Match this order
+                    {orderMatching ? (
+                      <>
+                        <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Matching...
+                      </>
+                    ) : (
+                      'Match this order'
+                    )}
                   </button>
                   <button 
                     onClick={() => {
