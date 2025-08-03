@@ -1589,6 +1589,21 @@ export default function App() {
                     </div>
                   </div>
                 )}
+                {selectedOrder.matchTxHash && (
+                  <div><strong>Match Transaction:</strong> 
+                    <code className="bg-white px-2 py-1 rounded text-sm ml-2">{selectedOrder.matchTxHash}</code>
+                    <div className="mt-1">
+                      <a 
+                        href={`https://sepolia.etherscan.io/tx/${selectedOrder.matchTxHash}`} 
+                        target="_blank" 
+                        rel="noopener noreferrer" 
+                        className="btn btn-secondary inline-block px-2 py-1 text-xs"
+                      >
+                        View on Etherscan
+                      </a>
+                    </div>
+                  </div>
+                )}
                 <div className="mt-4">
                   <button 
                     onClick={() => matchSelectedOrder()}
