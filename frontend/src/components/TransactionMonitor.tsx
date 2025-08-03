@@ -78,42 +78,52 @@ export const TransactionMonitor: React.FC<TransactionMonitorProps> = ({
   };
 
   return (
-    <div className="transaction-monitor">
-      <div className={`status-indicator ${getStatusColor()}`}>
-        <span className="status-icon">{getStatusIcon()}</span>
-        <span className="status-text">
+    <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
+      <div className={`flex items-center gap-3 mb-4 ${getStatusColor()}`}>
+        <span className="text-2xl">{getStatusIcon()}</span>
+        <span className="font-medium">
           {status === 'pending' && 'Transaction Pending...'}
           {status === 'confirmed' && 'Transaction Confirmed!'}
           {status === 'failed' && 'Transaction Failed'}
         </span>
       </div>
       
-      <div className="transaction-details">
-        <div className="tx-hash">
-          <strong>Transaction Hash:</strong>
+      <div className="space-y-3">
+        <div className="flex items-center gap-2">
+          <strong className="text-gray-700">Transaction Hash:</strong>
           <a 
             href={`https://sepolia.etherscan.io/tx/${txHash}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="tx-link"
+            className="text-primary-600 hover:text-primary-700 underline text-sm font-mono"
           >
             {txHash.slice(0, 10)}...{txHash.slice(-8)}
           </a>
         </div>
         
         {status === 'confirmed' && (
-          <>
-            <div className="confirmation-details">
-              <div><strong>Confirmations:</strong> {confirmations}</div>
-              <div><strong>Block Number:</strong> {blockNumber}</div>
-              <div><strong>Gas Used:</strong> {gasUsed}</div>
+          <div className="bg-green-50 border border-green-200 rounded-lg p-4 space-y-2">
+            <div className="flex justify-between">
+              <span className="font-medium text-gray-700">Confirmations:</span>
+              <span className="text-green-700">{confirmations}</span>
             </div>
-          </>
+            <div className="flex justify-between">
+              <span className="font-medium text-gray-700">Block Number:</span>
+              <span className="text-green-700">{blockNumber}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="font-medium text-gray-700">Gas Used:</span>
+              <span className="text-green-700">{gasUsed}</span>
+            </div>
+          </div>
         )}
         
         {status === 'failed' && (
-          <div className="error-details">
-            <strong>Error:</strong> {error}
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+            <div className="flex justify-between">
+              <span className="font-medium text-gray-700">Error:</span>
+              <span className="text-red-700">{error}</span>
+            </div>
           </div>
         )}
       </div>

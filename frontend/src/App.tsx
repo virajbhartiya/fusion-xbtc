@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { ethers } from 'ethers';
-import './App.css';
 import type { Eip1193Provider } from 'ethers';
 
 const CONTRACT_ADDRESS = import.meta.env.VITE_FUSION_HTLC_ADDRESS || '0x0000000000000000000000000000000000000000';
@@ -68,7 +67,7 @@ export default function App() {
   const [recipient, setRecipient] = useState<string>('');
   const [secret, setSecret] = useState<string>('');
   const [hashlock, setHashlock] = useState<string>('');
-  const [timelock, setTimelock] = useState<string>('');
+  const [timelock, setTimelock] = useState<string>('3600');
   const [status, setStatus] = useState<string>('');
   const [step, setStep] = useState<number>(0);
   const [log, setLog] = useState<Record<string, unknown> | null>(null);
@@ -250,10 +249,17 @@ export default function App() {
       const orderId = ethers.keccak256(ethers.toUtf8Bytes(`fusion-${Date.now()}-${Math.random()}`));
       const secret = crypto.getRandomValues(new Uint8Array(32));
       const hashlock = ethers.keccak256(secret);
-      const orderTimelock = Math.floor(Date.now() / 1000) + parseInt(timelock);
+      const timelockSeconds = timelock ? parseInt(timelock) : 3600; // Default to 1 hour if not set
+      const orderTimelock = Math.floor(Date.now() / 1000) + timelockSeconds;
+      
+      // Calculate exchange rate (mock - in real app this would come from price feeds)
+      const ethToBtcRate = 0.002; // 1 ETH = 0.002 BTC (mock rate)
+      const btcToEthRate = 1 / ethToBtcRate; // 1 BTC = 500 ETH
       
       const ethAmount = ethers.parseEther(amount);
-      const btcAmount = ethers.parseEther(amount);
+      const btcAmount = direction === 'eth2btc' 
+        ? ethers.parseEther((parseFloat(amount) * ethToBtcRate).toFixed(8))
+        : ethers.parseEther((parseFloat(amount) * btcToEthRate).toFixed(8));
       
       const makerAsset = direction === 'eth2btc' ? 'ETH' : 'BTC';
       const takerAsset = direction === 'eth2btc' ? 'BTC' : 'ETH';
@@ -493,50 +499,137 @@ export default function App() {
   }, [hashlock]);
 
   return (
-    <div className="app-container">
-      <header className="header">
-        <div className="header-content">
-          <a href="#" className="logo animate-fade-in">Fusion+</a>
-          <nav>
-            <ul className="nav-links">
-              <li><a href="#swap" className="animate-slide-in-left">Demo</a></li>
-              <li><a href="#explainer" className="animate-slide-in-right">About</a></li>
-            </ul>
-          </nav>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
+      <header className="backdrop-blur-md bg-white/80 border-b border-white/20 sticky top-0 z-50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center h-16">
+            <a href="#" className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent animate-fade-in">Fusion+</a>
+            <nav>
+              <ul className="flex space-x-8">
+                <li><a href="#swap" className="text-gray-700 hover:text-blue-600 transition-colors duration-200 font-medium animate-slide-in-left">Demo</a></li>
+                <li><a href="#explainer" className="text-gray-700 hover:text-blue-600 transition-colors duration-200 font-medium animate-slide-in-right">About</a></li>
+              </ul>
+            </nav>
+          </div>
         </div>
       </header>
 
-      <section className="hero">
-        <div className="hero-content">
-          <h1 className="animate-fade-in-up">Swap crypto. No friction. No noise.</h1>
-          <p className="subtitle animate-fade-in-up">A seamless interface to move assets across chains, designed for clarity and trust.</p>
-          <div className="hero-actions">
-            <a href="https://github.com/art3mis/fusion-xbtc" target="_blank" rel="noopener noreferrer" className="btn btn-secondary animate-fade-in-up">
-              View on GitHub
-            </a>
-            <a href="#swap" className="btn btn-primary btn-large animate-fade-in-up">
-              Launch Demo
-            </a>
+      <section className="relative py-32 overflow-hidden">
+        {/* Background Elements */}
+        <div className="absolute inset-0 bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50"></div>
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(59,130,246,0.1),transparent_50%)]"></div>
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_80%,rgba(99,102,241,0.1),transparent_50%)]"></div>
+        
+        {/* Floating Elements */}
+        <div className="absolute top-20 left-10 w-20 h-20 bg-gradient-to-r from-blue-400 to-indigo-400 rounded-full opacity-20 animate-float"></div>
+        <div className="absolute top-40 right-20 w-16 h-16 bg-gradient-to-r from-purple-400 to-pink-400 rounded-full opacity-20 animate-float-delayed"></div>
+        <div className="absolute bottom-20 left-1/4 w-12 h-12 bg-gradient-to-r from-indigo-400 to-blue-400 rounded-full opacity-20 animate-float"></div>
+        <div className="absolute top-1/2 right-1/3 w-8 h-8 bg-gradient-to-r from-pink-400 to-purple-400 rounded-full opacity-30 animate-float-delayed"></div>
+        <div className="absolute bottom-1/3 right-10 w-10 h-10 bg-gradient-to-r from-indigo-400 to-blue-400 rounded-full opacity-25 animate-float"></div>
+        
+        <div className="relative max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center">
+            {/* Badge */}
+            <div className="inline-flex items-center px-6 py-3 rounded-full bg-gradient-to-r from-blue-100 to-indigo-100 border border-blue-200 text-blue-800 text-sm font-semibold mb-8 animate-fade-in shadow-sm">
+              <div className="flex items-center space-x-2">
+                <div className="w-2 h-2 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-full animate-pulse"></div>
+                <span>Cross-chain atomic swaps powered by HTLC</span>
+                <div className="w-2 h-2 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-full animate-pulse delay-300"></div>
+              </div>
+            </div>
+            
+            {/* Main Heading */}
+            <h1 className="text-7xl md:text-8xl font-black mb-8 animate-fade-in-up leading-none">
+              <span className="bg-gradient-to-r from-gray-900 via-blue-900 to-indigo-900 bg-clip-text text-transparent">
+                Swap crypto.
+              </span>
+              <br />
+              <span className="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 bg-clip-text text-transparent">
+                No friction.
+              </span>
+              <br />
+              <span className="bg-gradient-to-r from-gray-700 to-gray-900 bg-clip-text text-transparent">
+                No noise.
+              </span>
+            </h1>
+            
+            {/* Subtitle */}
+            <p className="text-2xl text-gray-600 mb-16 animate-fade-in-up max-w-3xl mx-auto leading-relaxed font-light">
+              A seamless interface to move assets across chains, designed for clarity and trust.
+            </p>
+            
+            {/* Stats */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-16 animate-fade-in-up">
+              <div className="text-center">
+                <div className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent mb-2">100%</div>
+                <div className="text-gray-600 font-medium">Non-custodial</div>
+              </div>
+              <div className="text-center">
+                <div className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent mb-2">0%</div>
+                <div className="text-gray-600 font-medium">Platform fees</div>
+              </div>
+              <div className="text-center">
+                <div className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent mb-2">∞</div>
+                <div className="text-gray-600 font-medium">Chain support</div>
+              </div>
+            </div>
+            
+            {/* CTA Buttons */}
+            <div className="flex flex-col sm:flex-row gap-6 justify-center animate-fade-in-up">
+              <a 
+                href="https://github.com/virajbhartiya/fusion-xbtc" 
+                target="_blank" 
+                rel="noopener noreferrer" 
+                className="group inline-flex items-center px-10 py-5 rounded-2xl bg-white/90 backdrop-blur-sm border border-gray-200 text-gray-700 font-bold text-lg hover:bg-white hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1"
+              >
+                <svg className="w-6 h-6 mr-3 group-hover:scale-110 transition-transform duration-300" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M10 0C4.477 0 0 4.484 0 10.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0110 4.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.203 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.942.359.31.678.921.678 1.856 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0020 10.017C20 4.484 15.522 0 10 0z" clipRule="evenodd" />
+                </svg>
+                View on GitHub
+              </a>
+              <a 
+                href="#swap" 
+                className="group inline-flex items-center px-10 py-5 rounded-2xl bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 text-white font-bold text-lg shadow-2xl hover:shadow-3xl transition-all duration-300 transform hover:-translate-y-2 hover:scale-105 animate-glow"
+              >
+                <span className="mr-3">Launch Demo</span>
+                <svg className="w-6 h-6 group-hover:translate-x-1 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                </svg>
+              </a>
+            </div>
+            
+            {/* Scroll Indicator */}
+            <div className="mt-20 animate-bounce">
+              <div className="inline-flex flex-col items-center text-gray-400">
+                <span className="text-sm font-medium mb-2">Scroll to explore</span>
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                </svg>
+              </div>
+            </div>
           </div>
         </div>
       </section>
 
-
-
-      <section id="swap" className="swap-interface">
-        <div className="swap-container">
-          <div className="swap-card animate-fade-in-up">
-            <div className="swap-header">
-              <h2 className="swap-title">Start a Swap</h2>
-              <p className="swap-subtitle">Configure your cross-chain atomic swap</p>
+      <section id="swap" className="py-20 bg-gradient-to-br from-gray-50 to-blue-50">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="bg-white/80 backdrop-blur-sm rounded-3xl shadow-2xl border border-white/20 p-8 animate-fade-in-up">
+            <div className="text-center mb-10">
+              <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-2xl mb-6">
+                <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                </svg>
+              </div>
+              <h2 className="text-4xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent mb-3">Start a Swap</h2>
+              <p className="text-lg text-gray-600">Configure your cross-chain atomic swap</p>
             </div>
             
             {direction === 'eth2btc' && (
-              <div className="form-group">
+              <div className="mb-6">
                 <label className="form-label">Ethereum wallet</label>
                 {ethAddress ? (
                   <div className="message success">
-                    Connected: <code>{ethAddress}</code>
+                    Connected: <code className="bg-white px-2 py-1 rounded text-sm">{ethAddress}</code>
                   </div>
                 ) : (
                   <button 
@@ -552,11 +645,11 @@ export default function App() {
             )}
             
             {direction === 'btc2eth' && (
-              <div className="form-group">
+              <div className="mb-6">
                 <label className="form-label">{chain.toUpperCase()} wallet</label>
                 {utxoAddress ? (
                   <div className="message success">
-                    Connected: <code>{utxoAddress}</code> <span style={{opacity: 0.7}}>[{utxoWallet}]</span>
+                    Connected: <code className="bg-white px-2 py-1 rounded text-sm">{utxoAddress}</code> <span className="opacity-70">[{utxoWallet}]</span>
                   </div>
                 ) : (
                   <button 
@@ -579,66 +672,52 @@ export default function App() {
                 handleStart();
               }
             }}>
-              <div className="form-group">
+              <div className="mb-6">
                 <label className="form-label">Swap direction</label>
                 <select className="form-select" value={direction} onChange={e => setDirection(e.target.value)}>
                   {DIRECTIONS.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
                 </select>
               </div>
               
-              <div className="form-group">
+              <div className="mb-6">
                 <label className="form-label">UTXO chain</label>
                 <select className="form-select" value={chain} onChange={e => setChain(e.target.value)}>
                   {CHAINS.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
                 </select>
               </div>
               
-              <div className="form-group">
+              <div className="mb-6">
                 <label className="form-label">Amount</label>
                 <input className="form-input" type="text" value={amount} onChange={e => setAmount(e.target.value)} placeholder="e.g. 0.01" />
               </div>
               
-              <div className="form-group">
+              <div className="mb-6">
                 <label className="form-label">Recipient address</label>
                 <input className="form-input" type="text" value={recipient} onChange={e => setRecipient(e.target.value)} placeholder={getRecipientPlaceholder()} />
               </div>
               
               {direction === 'btc2eth' && (
-                <div className="form-group">
+                <div className="mb-6">
                   <label className="form-label">Change address</label>
                   <input className="form-input" type="text" value={changeAddress} onChange={e => setChangeAddress(e.target.value)} placeholder="Your BTC/LTC/DOGE/BCH change address" />
                 </div>
               )}
               
               {direction === 'eth2btc' && (
-                <div className="form-group">
+                <div className="mb-6">
                   <button 
                     type="button" 
                     onClick={() => setShowAdvanced(v => !v)}
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      color: 'var(--primary-600)',
-                      textDecoration: 'underline',
-                      cursor: 'pointer',
-                      fontSize: '0.875rem',
-                      padding: 0,
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.05em',
-                      fontWeight: '600',
-                      transition: 'color var(--transition)'
-                    }}
-                    onMouseEnter={(e) => e.currentTarget.style.color = 'var(--primary-700)'}
-                    onMouseLeave={(e) => e.currentTarget.style.color = 'var(--primary-600)'}
+                    className="text-primary-600 hover:text-primary-700 underline text-sm font-semibold uppercase tracking-wide transition-colors duration-200"
                   >
                     {showAdvanced ? 'Hide advanced' : 'Show advanced'}
                   </button>
                   
                   {showAdvanced && (
-                    <div className="form-group">
+                    <div className="mt-4">
                       <label className="form-label">ETH HTLC contract address</label>
                       <input className="form-input" type="text" value={ethContract} onChange={e => setEthContract(e.target.value)} placeholder="0x..." />
-                      <small style={{color: 'var(--gray-600)', fontSize: '0.75rem', display: 'block', marginTop: '0.25rem'}}>
+                      <small className="text-gray-600 text-xs block mt-1">
                         Default: {import.meta.env.VITE_ETH_HTLC_ADDRESS || 'Not set'}
                       </small>
                     </div>
@@ -646,27 +725,27 @@ export default function App() {
                 </div>
               )}
               
-              <div className="form-group">
+              <div className="mb-6">
                 <label className="form-label">Timelock (seconds from now)</label>
                 <input className="form-input" type="number" value={timelock} onChange={e => setTimelock(e.target.value)} placeholder="3600" />
               </div>
               
-              <div className="form-group">
-                <label style={{display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer'}}>
+              <div className="mb-6">
+                <label className="flex items-center gap-2 cursor-pointer">
                   <input 
                     type="checkbox" 
                     checked={useFusion} 
                     onChange={e => setUseFusion(e.target.checked)}
-                    style={{width: 'auto', margin: 0, accentColor: 'var(--primary-600)'}}
+                    className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
                   />
-                  <span style={{textTransform: 'uppercase', letterSpacing: '0.05em', fontSize: '0.875rem'}}>Use Fusion+ protocol (1inch integration)</span>
+                  <span className="uppercase tracking-wide text-sm">Use Fusion+ protocol (1inch integration)</span>
                 </label>
               </div>
               
               {useFusion && (
-                <div className="message info">
-                  <h4>Fusion+ configuration</h4>
-                  <div className="form-group">
+                <div className="message info mb-6">
+                  <h4 className="font-semibold mb-4">Fusion+ configuration</h4>
+                  <div className="mb-4">
                     <label className="form-label">Fusion+ HTLC contract address</label>
                     <input 
                       className="form-input" 
@@ -676,7 +755,7 @@ export default function App() {
                       placeholder="0x..." 
                     />
                   </div>
-                  <div style={{marginTop: '1rem'}}>
+                  <div className="mt-4">
                     <button 
                       type="button" 
                       onClick={loadAvailableOrders}
@@ -685,7 +764,7 @@ export default function App() {
                       Browse available orders
                     </button>
                   </div>
-                  <div style={{marginTop: '0.5rem', fontSize: '0.875rem', color: 'var(--gray-600)'}}>
+                  <div className="mt-2 text-sm text-gray-600">
                     Fusion+ enables order matching and partial fills for cross-chain swaps
                   </div>
                 </div>
@@ -701,19 +780,20 @@ export default function App() {
             </form>
             
             {showOrderList && availableOrders.length > 0 && (
-              <div className="message info">
-                <h4>Available Fusion+ orders</h4>
-                <div style={{maxHeight: '300px', overflowY: 'auto'}}>
+              <div className="message info mt-6">
+                <h4 className="font-semibold mb-4">Available Fusion+ orders</h4>
+                <div className="max-h-80 overflow-y-auto">
                   {availableOrders.map((order, index) => (
-                    <div key={index} style={{margin: '0.5rem 0', padding: '1rem', background: 'var(--white)', borderRadius: 'var(--radius)', border: '1px solid var(--gray-200)'}}>
-                      <div><strong>Order ID:</strong> <code>{order.orderId}</code></div>
-                      <div><strong>Direction:</strong> {order.direction}</div>
-                      <div><strong>Amount:</strong> {order.ethAmount} ETH ↔ {order.btcAmount} BTC</div>
+                    <div key={index} className="mb-4 p-4 bg-white rounded-lg border border-gray-200">
+                      <div><strong>Order ID:</strong> <code className="bg-gray-100 px-2 py-1 rounded text-sm">{order.orderId}</code></div>
+                      <div><strong>Direction:</strong> {order.makerAsset} → {order.takerAsset}</div>
+                      <div><strong>Amount:</strong> {order.makerAmount} {order.makerAsset} → {order.takerAmount} {order.takerAsset}</div>
+                      <div><strong>Rate:</strong> 1 {order.makerAsset} = {(parseFloat(order.takerAmount) / parseFloat(order.makerAmount)).toFixed(6)} {order.takerAsset}</div>
                       <div><strong>Status:</strong> {order.status}</div>
+                      <div><strong>Maker:</strong> <code className="bg-gray-100 px-2 py-1 rounded text-sm text-xs">{order.maker?.slice(0, 10)}...{order.maker?.slice(-8)}</code></div>
                       <button 
                         onClick={() => selectOrder(order.orderId)}
-                        className="btn btn-primary"
-                        style={{marginTop: '0.5rem', padding: '0.5rem 1rem', fontSize: '0.875rem'}}
+                        className="btn btn-primary mt-2 px-4 py-2 text-sm"
                       >
                         Select order
                       </button>
@@ -722,8 +802,7 @@ export default function App() {
                 </div>
                 <button 
                   onClick={() => setShowOrderList(false)}
-                  className="btn btn-secondary"
-                  style={{marginTop: '1rem'}}
+                  className="btn btn-secondary mt-4"
                 >
                   Close
                 </button>
@@ -731,25 +810,26 @@ export default function App() {
             )}
 
             {selectionMessage && (
-              <div className="message success">
+              <div className="message success mt-6">
                 {selectionMessage}
               </div>
             )}
 
             {selectedOrder && (
-              <div className="message info">
-                <h4>Selected order</h4>
-                <div><strong>Order ID:</strong> <code>{selectedOrder.orderId}</code></div>
-                <div><strong>Direction:</strong> {selectedOrder.direction}</div>
-                <div><strong>Amount:</strong> {selectedOrder.ethAmount} ETH ↔ {selectedOrder.btcAmount} BTC</div>
+              <div className="message info mt-6">
+                <h4 className="font-semibold mb-4">Selected order</h4>
+                <div><strong>Order ID:</strong> <code className="bg-white px-2 py-1 rounded text-sm">{selectedOrder.orderId}</code></div>
+                <div><strong>Direction:</strong> {selectedOrder.makerAsset} → {selectedOrder.takerAsset}</div>
+                <div><strong>Amount:</strong> {selectedOrder.makerAmount} {selectedOrder.makerAsset} → {selectedOrder.takerAmount} {selectedOrder.takerAsset}</div>
+                <div><strong>Rate:</strong> 1 {selectedOrder.makerAsset} = {(parseFloat(selectedOrder.takerAmount) / parseFloat(selectedOrder.makerAmount)).toFixed(6)} {selectedOrder.takerAsset}</div>
                 <div><strong>Status:</strong> {selectedOrder.status}</div>
-                <div><strong>ETH address:</strong> <code>{selectedOrder.ethAddress}</code></div>
-                <div><strong>BTC address:</strong> <code>{selectedOrder.btcAddress}</code></div>
-                <div style={{marginTop: '1rem'}}>
+                <div><strong>Maker Address:</strong> <code className="bg-white px-2 py-1 rounded text-sm">{selectedOrder.maker}</code></div>
+                <div><strong>Timelock:</strong> {new Date(selectedOrder.timelock).toLocaleString()}</div>
+                <div><strong>Created:</strong> {new Date(selectedOrder.createdAt).toLocaleString()}</div>
+                <div className="mt-4">
                   <button 
                     onClick={() => matchSelectedOrder()}
-                    className="btn btn-primary"
-                    style={{marginRight: '0.5rem'}}
+                    className="btn btn-primary mr-2"
                   >
                     Match this order
                   </button>
@@ -768,100 +848,99 @@ export default function App() {
             )}
 
             {step > 0 && (
-              <div className="message info">
-                <h3>Swap secret & hashlock</h3>
-                <div><strong>Secret (preimage):</strong> <code>{secret}</code></div>
-                <div><strong>Hashlock (SHA-256):</strong> <code>{hashlock}</code></div>
+              <div className="message info mt-6">
+                <h3 className="font-semibold mb-4">Swap secret & hashlock</h3>
+                <div><strong>Secret (preimage):</strong> <code className="bg-white px-2 py-1 rounded text-sm">{secret}</code></div>
+                <div><strong>Hashlock (SHA-256):</strong> <code className="bg-white px-2 py-1 rounded text-sm">{hashlock}</code></div>
                 <div><strong>Status:</strong> {status}</div>
                 {log && (
-                  <div style={{marginTop: '1rem'}}>
+                  <div className="mt-4">
                     <strong>Swap log:</strong>
-                    <div style={{marginTop: '0.5rem', fontSize: '0.875rem', background: 'var(--gray-50)', padding: '1rem', borderRadius: 'var(--radius)', border: '1px solid var(--gray-200)'}}>
+                    <div className="mt-2 text-sm bg-gray-50 p-4 rounded-lg border border-gray-200">
                       {Object.entries(log).map(([k, v]) => (
                         (k !== 'ethTx' && k !== 'btcTx') ? (
-                          <div key={k} style={{marginBottom: '0.5rem'}}>
+                          <div key={k} className="mb-2">
                             <strong>{k}:</strong> {typeof v === 'object' ? JSON.stringify(v) : String(v)}
                           </div>
                         ) : null
                       ))}
                     </div>
                     {'ethTx' in log && typeof log.ethTx === 'string' && (
-                      <div style={{marginTop: '0.5rem'}}>
-                        <a href={`https://sepolia.etherscan.io/tx/${log.ethTx}`} target="_blank" rel="noopener noreferrer" className="btn btn-secondary" style={{display: 'inline-block', padding: '0.5rem 1rem'}}>View ETH transaction</a>
+                      <div className="mt-2">
+                        <a href={`https://sepolia.etherscan.io/tx/${log.ethTx}`} target="_blank" rel="noopener noreferrer" className="btn btn-secondary inline-block px-4 py-2">View ETH transaction</a>
                       </div>
                     )}
                     {'btcTx' in log && typeof log.btcTx === 'string' && (
-                      <div style={{marginTop: '0.5rem'}}>
-                        <a href={`https://mempool.space/testnet/tx/${log.btcTx}`} target="_blank" rel="noopener noreferrer" className="btn btn-secondary" style={{display: 'inline-block', padding: '0.5rem 1rem'}}>View {chain.toUpperCase()} transaction</a>
+                      <div className="mt-2">
+                        <a href={`https://mempool.space/testnet/tx/${log.btcTx}`} target="_blank" rel="noopener noreferrer" className="btn btn-secondary inline-block px-4 py-2">View {chain.toUpperCase()} transaction</a>
                       </div>
                     )}
                   </div>
                 )}
 
                 {useFusion && fusionOrderId && (
-                  <div className="message info">
-                    <h4>Fusion+ order</h4>
-                    <div><strong>Order ID:</strong> <code>{fusionOrderId}</code></div>
+                  <div className="message info mt-6">
+                    <h4 className="font-semibold mb-4">Fusion+ order</h4>
+                    <div><strong>Order ID:</strong> <code className="bg-white px-2 py-1 rounded text-sm">{fusionOrderId}</code></div>
                     <div><strong>Status:</strong> {fusionStatus}</div>
                     {log && typeof log === 'object' && 'txHash' in log && typeof log.txHash === 'string' && (
-                      <div style={{marginTop: '0.5rem'}}>
-                        <strong>Transaction Hash:</strong> <code>{log.txHash}</code>
-                        <div style={{marginTop: '0.5rem'}}>
+                      <div className="mt-2">
+                        <strong>Transaction Hash:</strong> <code className="bg-white px-2 py-1 rounded text-sm">{log.txHash}</code>
+                        <div className="mt-2">
                           <a 
                             href={`https://sepolia.etherscan.io/tx/${log.txHash}`} 
                             target="_blank" 
                             rel="noopener noreferrer" 
-                            className="btn btn-secondary"
-                            style={{display: 'inline-block', padding: '0.5rem 1rem', fontSize: '0.875rem'}}
+                            className="btn btn-secondary inline-block px-4 py-2 text-sm"
                           >
                             View on Etherscan
                           </a>
                         </div>
                       </div>
                     )}
-                    <div style={{marginTop: '1rem'}}>
-                      <button className="btn btn-primary" style={{marginRight: '0.5rem'}} onClick={() => {}}>Check status</button>
-                      <button className="btn btn-primary" style={{marginRight: '0.5rem'}} onClick={() => {}}>Create on chain</button>
-                      <button className="btn btn-primary" style={{marginRight: '0.5rem'}} onClick={() => {}}>Match order</button>
-                      <button className="btn btn-primary" style={{marginRight: '0.5rem'}} onClick={() => matchSelectedOrder()}>Match selected</button>
+                    <div className="mt-4">
+                      <button className="btn btn-primary mr-2" onClick={() => {}}>Check status</button>
+                      <button className="btn btn-primary mr-2" onClick={() => {}}>Create on chain</button>
+                      <button className="btn btn-primary mr-2" onClick={() => {}}>Match order</button>
+                      <button className="btn btn-primary mr-2" onClick={() => matchSelectedOrder()}>Match selected</button>
                       <button className="btn btn-secondary" onClick={() => {}}>Cancel order</button>
                     </div>
-                    <div style={{marginTop: '0.5rem', fontSize: '0.875rem', color: 'var(--gray-600)'}}>
+                    <div className="mt-2 text-sm text-gray-600">
                       This order is now available for matching on the Fusion+ network
                     </div>
                   </div>
                 )}
                 
                 {direction === 'eth2btc' && ethContract && ethAddress && !useFusion && (
-                  <div style={{marginTop: '1.5rem'}}>
-                    <button className="btn btn-primary" style={{marginRight: '0.5rem'}} onClick={lockEth}>Lock ETH</button>
-                    <button className="btn btn-primary" style={{marginRight: '0.5rem'}} onClick={redeemEth}>Redeem</button>
+                  <div className="mt-6">
+                    <button className="btn btn-primary mr-2" onClick={lockEth}>Lock ETH</button>
+                    <button className="btn btn-primary mr-2" onClick={redeemEth}>Redeem</button>
                     <button className="btn btn-secondary" onClick={refundEth}>Refund</button>
-                    {txStatus && <div className="message info" style={{marginTop: '0.5rem'}}>{txStatus}</div>}
-                    {txHash && <div style={{marginTop: '0.5rem'}}><a href={`https://sepolia.etherscan.io/tx/${txHash}`} target="_blank" rel="noopener noreferrer" className="btn btn-secondary" style={{display: 'inline-block', padding: '0.5rem 1rem'}}>View transaction</a></div>}
+                    {txStatus && <div className="message info mt-2">{txStatus}</div>}
+                    {txHash && <div className="mt-2"><a href={`https://sepolia.etherscan.io/tx/${txHash}`} target="_blank" rel="noopener noreferrer" className="btn btn-secondary inline-block px-4 py-2">View transaction</a></div>}
                   </div>
                 )}
-                <div style={{marginTop: '1rem'}}>
+                <div className="mt-4">
                   <strong>Next steps:</strong>
-                  <ol style={{marginTop: '0.5rem', paddingLeft: '1.5rem'}}>
+                  <ol className="mt-2 pl-6">
                     <li>Lock funds on source chain using the above hashlock and timelock.</li>
                     <li>Share hashlock with counterparty to lock on destination chain.</li>
                     <li>Redeem on destination chain with secret when ready.</li>
                     <li>Monitor both chains for redeem/refund status.</li>
                   </ol>
-                  <p style={{marginTop: '0.5rem', fontSize: '0.875rem', color: 'var(--gray-600)'}}>All transactions must be copy-pasted into your wallet or CLI. No wallet integration.</p>
+                  <p className="mt-2 text-sm text-gray-600">All transactions must be copy-pasted into your wallet or CLI. No wallet integration.</p>
                 </div>
               </div>
             )}
             {step > 0 && direction === 'btc2eth' && utxoAddress && (
-              <div className="message info">
-                <h3>UTXO chain actions</h3>
-                <button className="btn btn-primary" style={{marginRight: '0.5rem'}} onClick={lockUtxo}>Lock funds (wallet)</button>
-                {utxoTxStatus && <div style={{marginTop: '0.5rem'}}>{utxoTxStatus}</div>}
-                {utxoTxId && <div style={{marginTop: '0.5rem'}}><strong>TxID:</strong> <code>{utxoTxId}</code></div>}
-                <div style={{marginTop: '1rem'}}>
+              <div className="message info mt-6">
+                <h3 className="font-semibold mb-4">UTXO chain actions</h3>
+                <button className="btn btn-primary mr-2" onClick={lockUtxo}>Lock funds (wallet)</button>
+                {utxoTxStatus && <div className="mt-2">{utxoTxStatus}</div>}
+                {utxoTxId && <div className="mt-2"><strong>TxID:</strong> <code className="bg-white px-2 py-1 rounded text-sm">{utxoTxId}</code></div>}
+                <div className="mt-4">
                   <strong>Instructions:</strong>
-                  <ol style={{marginTop: '0.5rem', paddingLeft: '1.5rem'}}>
+                  <ol className="mt-2 pl-6">
                     <li>Connect your browser wallet for {chain.toUpperCase()} (Unisat, Hiro, Xverse, etc).</li>
                     <li>Click "Lock funds" to sign and broadcast the HTLC transaction.</li>
                     <li>Monitor status and redeem/refund as needed.</li>
@@ -873,36 +952,52 @@ export default function App() {
         </div>
       </section>
 
-      <section id="explainer" className="explainer">
-        <div className="explainer-content">
-          <div className="explainer-header">
-            <h2 className="explainer-title">What is this?</h2>
-            <p className="explainer-subtitle">
+      <section id="explainer" className="py-24 bg-gradient-to-br from-white to-gray-50">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-20">
+            <div className="inline-flex items-center px-4 py-2 rounded-full bg-blue-100 text-blue-800 text-sm font-medium mb-6">
+              <span className="w-2 h-2 bg-blue-500 rounded-full mr-2"></span>
+              Features
+            </div>
+            <h2 className="text-5xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent mb-6">What is this?</h2>
+            <p className="text-xl text-gray-600 max-w-3xl mx-auto leading-relaxed">
               This tool allows you to transfer crypto assets across different blockchains using the best available routes in real time.
             </p>
           </div>
           
-          <div className="features-grid">
-            <div className="feature-card">
-              <div className="feature-icon">🔒</div>
-              <h3 className="feature-title">No custodial risk</h3>
-              <p className="feature-description">
+          <div className="grid md:grid-cols-3 gap-8">
+            <div className="group bg-white/80 backdrop-blur-sm rounded-2xl p-8 text-center hover:shadow-xl transition-all duration-300 border border-white/20 hover:border-blue-200/50">
+              <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-r from-green-500 to-emerald-500 rounded-2xl mb-6 group-hover:scale-110 transition-transform duration-300">
+                <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                </svg>
+              </div>
+              <h3 className="text-xl font-bold text-gray-900 mb-4">No custodial risk</h3>
+              <p className="text-gray-600 leading-relaxed">
                 Your assets remain in your control throughout the entire process. No third-party custody required.
               </p>
             </div>
             
-            <div className="feature-card">
-              <div className="feature-icon">🛣️</div>
-              <h3 className="feature-title">Optimized liquidity routes</h3>
-              <p className="feature-description">
+            <div className="group bg-white/80 backdrop-blur-sm rounded-2xl p-8 text-center hover:shadow-xl transition-all duration-300 border border-white/20 hover:border-blue-200/50">
+              <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-2xl mb-6 group-hover:scale-110 transition-transform duration-300">
+                <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+              </div>
+              <h3 className="text-xl font-bold text-gray-900 mb-4">Optimized liquidity routes</h3>
+              <p className="text-gray-600 leading-relaxed">
                 Automatically finds the best available paths across multiple bridges and exchanges.
               </p>
             </div>
             
-            <div className="feature-card">
-              <div className="feature-icon">📊</div>
-              <h3 className="feature-title">Live status updates</h3>
-              <p className="feature-description">
+            <div className="group bg-white/80 backdrop-blur-sm rounded-2xl p-8 text-center hover:shadow-xl transition-all duration-300 border border-white/20 hover:border-blue-200/50">
+              <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-r from-purple-500 to-pink-500 rounded-2xl mb-6 group-hover:scale-110 transition-transform duration-300">
+                <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <h3 className="text-xl font-bold text-gray-900 mb-4">Live status updates</h3>
+              <p className="text-gray-600 leading-relaxed">
                 Real-time tracking of your swap progress across both source and destination chains.
               </p>
             </div>
@@ -910,10 +1005,19 @@ export default function App() {
         </div>
       </section>
 
-      <section className="hackathon-footer">
-        <div className="hackathon-content">
-          <p className="hackathon-text">Built for ETHGlobal. Designed for people who care about UX.</p>
-          <a href="https://github.com/art3mis/fusion-xbtc" target="_blank" rel="noopener noreferrer" className="hackathon-link">GitHub</a>
+      <section className="bg-gradient-to-r from-gray-900 via-blue-900 to-indigo-900 text-white py-16">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+          <div className="inline-flex items-center px-4 py-2 rounded-full bg-white/10 backdrop-blur-sm text-white/90 text-sm font-medium mb-8">
+            <span className="w-2 h-2 bg-blue-400 rounded-full mr-2 animate-pulse"></span>
+            Built for ETHGlobal
+          </div>
+          <p className="text-xl mb-6 font-medium">Designed for people who care about UX.</p>
+          <a href="https://github.com/art3mis/fusion-xbtc" target="_blank" rel="noopener noreferrer" className="inline-flex items-center text-blue-300 hover:text-blue-200 underline transition-colors duration-200 font-medium">
+            <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M10 0C4.477 0 0 4.484 0 10.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0110 4.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.203 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.942.359.31.678.921.678 1.856 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0020 10.017C20 4.484 15.522 0 10 0z" clipRule="evenodd" />
+            </svg>
+            View on GitHub
+          </a>
         </div>
       </section>
     </div>

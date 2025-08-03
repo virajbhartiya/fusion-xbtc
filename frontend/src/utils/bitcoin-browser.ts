@@ -29,13 +29,13 @@ export class BitcoinBrowserUtils {
     };
   }
 
-  static buildHTLCAddress(params: HTLCParams): string {
+  static buildHTLCAddress(_params: HTLCParams): string {
     // Mock HTLC address generation
     const mockAddress = '2MtNby2Jpr13bfUGuvQDm1eWRoMxaEP6hgQ';
     return mockAddress;
   }
 
-  static createRedeemScript(params: HTLCParams): string {
+  static createRedeemScript(_params: HTLCParams): string {
     // Mock redeem script
     return '632102251a6657f0c27fd13d2a1e566f17a0be921c1b1428bb7c7a402e049b2033377aada81012345678901234567890123456789012886704bd038f68b1752103fe2b1e8add3e063412bfe92adabf7af023272a1f9d00029cbdbce09f415901ecad68';
   }
@@ -45,7 +45,7 @@ export class BitcoinBrowserUtils {
     return address.startsWith('tb1') || address.startsWith('bc1') || address.startsWith('2');
   }
 
-  static generateHashlock(secret: string): string {
+  static generateHashlock(_secret: string): string {
     // Mock hashlock generation
     return '12345678901234567890123456789012';
   }
