@@ -366,11 +366,11 @@ export default function App() {
             takerAsset: order[3],
             makerAmount: ethers.formatEther(order[4]),
             takerAmount: ethers.formatEther(order[5]),
-            timelock: new Date(order[6] * 1000).toISOString(),
+            timelock: new Date(Number(order[6]) * 1000).toISOString(),
             hashlock: order[7],
             isActive: order[8],
             isMatched: order[9],
-            createdAt: new Date(order[10] * 1000).toISOString(),
+            createdAt: new Date(Number(order[10]) * 1000).toISOString(),
             status: isActive ? 'active' : 'inactive'
           });
         } catch (error) {
@@ -422,11 +422,11 @@ export default function App() {
         takerAsset: order[3],
         makerAmount: ethers.formatEther(order[4]),
         takerAmount: ethers.formatEther(order[5]),
-        timelock: new Date(order[6] * 1000).toISOString(),
+        timelock: new Date(Number(order[6]) * 1000).toISOString(),
         hashlock: order[7],
         isActive: order[8],
         isMatched: order[9],
-        createdAt: new Date(order[10] * 1000).toISOString(),
+        createdAt: new Date(Number(order[10]) * 1000).toISOString(),
         status: isActive ? 'active' : 'inactive'
       };
       
