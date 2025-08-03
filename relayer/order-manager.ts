@@ -171,7 +171,7 @@ export class OrderManager {
   }
 
   private async saveAllOrders(): Promise<void> {
-    for (const [orderId, order] of this.orders) {
+    for (const [_, order] of this.orders) {
       await this.saveOrder(order);
     }
   }
@@ -273,7 +273,6 @@ export class OrderManager {
 
   async getOrdersNeedingAction(): Promise<Order[]> {
     return Array.from(this.orders.values()).filter(order => {
-      // Orders that need relayer action
       const needsAction = [
         'open',
         'partial',
