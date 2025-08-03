@@ -59,7 +59,7 @@ async function main() {
       value: parseInt(args.utxoAmount, 10),
     },
     redeemScript,
-    sequence: 0, // allow locktime
+    sequence: 0,
   } as any);
   psbt.addOutput({
     address: args.destAddress,

@@ -24,6 +24,8 @@ const FusionOrderSchema = z.object({
   status: z.enum(['open', 'filled', 'cancelled', 'expired']),
   createdAt: z.number(),
   updatedAt: z.number(),
+  txHash: z.string().optional(),
+  blockNumber: z.number().optional(),
 });
 
 const CrossChainSwapSchema = z.object({
@@ -72,9 +74,10 @@ export class FusionPlusIntegration {
     const secret = randomBytes(32);
     const hashlock = createHash('sha256').update(secret).digest('hex');
     const timelock = params.timelock || Math.floor(Date.now() / 1000) + 3600; // 1 hour default
+    const orderId = ethers.keccak256(ethers.toUtf8Bytes(`fusion-${Date.now()}-${Math.random()}`));
 
     const orderData = {
-      orderId: `fusion-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      orderId: orderId,
       makerAsset: params.direction === 'eth2btc' ? 'ETH' : 'BTC',
       takerAsset: params.direction === 'eth2btc' ? 'BTC' : 'ETH',
       makerAmount: params.direction === 'eth2btc' ? params.ethAmount : params.btcAmount,
@@ -89,18 +92,41 @@ export class FusionPlusIntegration {
       updatedAt: Date.now(),
     };
 
-    // Create Fusion+ order via API
+    // Create Fusion+ order via real blockchain contract
     try {
-      const response = await axios.post(`${FUSION_API_BASE_URL}/api/v1/orders`, {
-        ...orderData,
-        apiKey: FUSION_API_KEY,
-      });
-
-      if (response.status !== 200) {
-        throw new Error(`Failed to create Fusion+ order: ${response.statusText}`);
+      const contractAddress = process.env.FUSION_HTLC_ADDRESS;
+      if (!contractAddress) {
+        throw new Error('FUSION_HTLC_ADDRESS environment variable is required');
       }
 
-      return FusionOrderSchema.parse(response.data);
+      const contract = new ethers.Contract(contractAddress, [
+        "function createFusionOrder(bytes32 orderId, string makerAsset, string takerAsset, uint256 makerAmount, uint256 takerAmount, uint256 timelock, bytes32 hashlock) external payable"
+      ], this.wallet);
+
+      const ethAmount = ethers.parseEther(params.ethAmount);
+      const btcAmount = ethers.parseEther(params.btcAmount);
+      
+      const makerAmount = params.direction === 'eth2btc' ? ethAmount : btcAmount;
+      const takerAmount = params.direction === 'eth2btc' ? btcAmount : ethAmount;
+
+      const tx = await contract.createFusionOrder(
+        orderId,
+        orderData.makerAsset,
+        orderData.takerAsset,
+        makerAmount,
+        takerAmount,
+        timelock,
+        `0x${hashlock}`,
+        { value: makerAmount }
+      );
+
+      const receipt = await tx.wait();
+
+      return {
+        ...orderData,
+        txHash: tx.hash,
+        blockNumber: receipt.blockNumber
+      };
     } catch (error) {
       console.error('Error creating Fusion+ order:', error);
       throw error;
@@ -123,7 +149,7 @@ export class FusionPlusIntegration {
 
     // Create cross-chain swap record
     const swapData: CrossChainSwap = {
-      swapId: `swap-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      swapId: ethers.keccak256(ethers.toUtf8Bytes(`swap-${Date.now()}-${Math.random()}`)),
       direction: params.direction,
       ethAmount: params.ethAmount,
       btcAmount: params.btcAmount,

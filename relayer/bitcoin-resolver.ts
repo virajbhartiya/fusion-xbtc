@@ -350,25 +350,21 @@ export class BitcoinResolver {
   }
 
   private generateChangeAddress(): string {
-    // Generate a new address for change
-    // In a real implementation, this would use a proper wallet
-    const keyPair = this.ECPair.makeRandom({ network: this.network });
-    const { address } = bitcoin.payments.p2pkh({ 
-      pubkey: keyPair.publicKey, 
-      network: this.network 
-    });
-    return address!;
+    // Use configured change address or throw error
+    const changeAddress = process.env.BITCOIN_CHANGE_ADDRESS;
+    if (!changeAddress) {
+      throw new Error('BITCOIN_CHANGE_ADDRESS environment variable is required for change address generation');
+    }
+    return changeAddress;
   }
 
   private generateRefundAddress(): string {
-    // Generate a refund address
-    // In a real implementation, this would use the configured refund address
-    const keyPair = this.ECPair.makeRandom({ network: this.network });
-    const { address } = bitcoin.payments.p2pkh({ 
-      pubkey: keyPair.publicKey, 
-      network: this.network 
-    });
-    return address!;
+    // Use configured refund address or throw error
+    const refundAddress = process.env.BITCOIN_REFUND_ADDRESS;
+    if (!refundAddress) {
+      throw new Error('BITCOIN_REFUND_ADDRESS environment variable is required for refund address generation');
+    }
+    return refundAddress;
   }
 
   private async broadcastTransaction(txHex: string): Promise<string> {

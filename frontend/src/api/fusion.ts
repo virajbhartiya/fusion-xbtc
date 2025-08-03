@@ -1,6 +1,5 @@
-// Fusion+ API integration
-const FUSION_API_BASE_URL = process.env.FUSION_API_BASE_URL || 'https://fusion.1inch.io';
-const FUSION_API_KEY = process.env.FUSION_API_KEY;
+// Fusion+ API integration with real blockchain
+import { ethers } from 'ethers';
 
 // Fusion+ order types
 interface FusionOrder {
@@ -35,17 +34,46 @@ interface CrossChainSwap {
   updatedAt: number;
 }
 
+// Contract ABI for Fusion+ HTLC
+const FUSION_HTLC_ABI = [
+  "function createFusionOrder(bytes32 orderId, string makerAsset, string takerAsset, uint256 makerAmount, uint256 takerAmount, uint256 timelock, bytes32 hashlock) external payable",
+  "function matchFusionOrder(bytes32 orderId, bytes32 secret) external payable",
+  "function cancelFusionOrder(bytes32 orderId) external",
+  "function getFusionOrder(bytes32 orderId) external view returns (bytes32, address, string, string, uint256, uint256, uint256, bytes32, bool, bool, uint256)",
+  "function isOrderActive(bytes32 orderId) external view returns (bool)",
+  "function getActiveOrderIds() external view returns (bytes32[])",
+  "function getOrderIdByHashlock(bytes32 hashlock) external view returns (bytes32)"
+];
+
+// Get contract instance
+function getContract() {
+  const contractAddress = process.env.VITE_FUSION_HTLC_ADDRESS || '0x0000000000000000000000000000000000000000';
+  
+  if (typeof window !== 'undefined' && window.ethereum) {
+    const provider = new ethers.BrowserProvider(window.ethereum);
+    return new ethers.Contract(contractAddress, FUSION_HTLC_ABI, provider);
+  }
+  
+  throw new Error('No ethereum provider available');
+}
+
+// Get contract with signer for write operations
+async function getContractWithSigner() {
+  const contractAddress = process.env.VITE_FUSION_HTLC_ADDRESS || '0x0000000000000000000000000000000000000000';
+  
+  if (typeof window !== 'undefined' && window.ethereum) {
+    const provider = new ethers.BrowserProvider(window.ethereum);
+    const signer = await provider.getSigner();
+    return new ethers.Contract(contractAddress, FUSION_HTLC_ABI, signer);
+  }
+  
+  throw new Error('No ethereum provider available');
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();
     const { action, ...params } = body;
-
-    if (!FUSION_API_KEY) {
-      return new Response(JSON.stringify({ error: 'FUSION_API_KEY not configured' }), { 
-        status: 500, 
-        headers: { 'Content-Type': 'application/json' } 
-      });
-    }
 
     switch (action) {
       case 'create-order':
@@ -97,20 +125,47 @@ export async function POST(req: Request) {
   }
 }
 
-// Fusion+ API functions
+// Real blockchain functions
 async function createFusionOrder(params: any): Promise<FusionOrder> {
   const { randomBytes, createHash } = await import('crypto');
   
   const secret = randomBytes(32);
   const hashlock = createHash('sha256').update(secret).digest('hex');
   const timelock = params.timelock || Math.floor(Date.now() / 1000) + 3600;
+  const orderId = ethers.keccak256(ethers.toUtf8Bytes(`fusion-${Date.now()}-${Math.random()}`));
+
+  const ethAmount = ethers.parseEther(params.ethAmount);
+  const btcAmount = ethers.parseEther(params.btcAmount);
+  
+  const makerAsset = params.direction === 'eth2btc' ? 'ETH' : 'BTC';
+  const takerAsset = params.direction === 'eth2btc' ? 'BTC' : 'ETH';
+  const makerAmount = params.direction === 'eth2btc' ? ethAmount : btcAmount;
+  const takerAmount = params.direction === 'eth2btc' ? btcAmount : ethAmount;
+
+  // Get contract with signer for write operations
+  const contract = await getContractWithSigner();
+
+  // Create the order on blockchain
+  const tx = await contract.createFusionOrder(
+    orderId,
+    makerAsset,
+    takerAsset,
+    makerAmount,
+    takerAmount,
+    timelock,
+    `0x${hashlock}`,
+    { value: makerAmount }
+  );
+
+  // Wait for transaction confirmation
+  const receipt = await tx.wait();
 
   const orderData = {
-    orderId: `fusion-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-    makerAsset: params.direction === 'eth2btc' ? 'ETH' : 'BTC',
-    takerAsset: params.direction === 'eth2btc' ? 'BTC' : 'ETH',
-    makerAmount: params.direction === 'eth2btc' ? params.ethAmount : params.btcAmount,
-    takerAmount: params.direction === 'eth2btc' ? params.btcAmount : params.ethAmount,
+    orderId: orderId,
+    makerAsset,
+    takerAsset,
+    makerAmount: ethers.formatEther(makerAmount),
+    takerAmount: ethers.formatEther(takerAmount),
     makerAddress: params.direction === 'eth2btc' ? params.ethAddress : params.btcAddress,
     takerAddress: params.direction === 'eth2btc' ? params.btcAddress : params.ethAddress,
     hashlock: `0x${hashlock}`,
@@ -119,11 +174,10 @@ async function createFusionOrder(params: any): Promise<FusionOrder> {
     status: 'open' as const,
     createdAt: Date.now(),
     updatedAt: Date.now(),
+    txHash: tx.hash,
+    blockNumber: receipt.blockNumber
   };
 
-  // Simulate API call - in production this would call the actual Fusion+ API
-  console.log('Creating Fusion+ order:', orderData);
-  
   return orderData;
 }
 
@@ -131,7 +185,7 @@ async function createCrossChainSwap(params: any): Promise<CrossChainSwap> {
   const fusionOrder = await createFusionOrder(params);
   
   const swapData: CrossChainSwap = {
-    swapId: `swap-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    swapId: ethers.keccak256(ethers.toUtf8Bytes(`swap-${Date.now()}-${Math.random()}`)),
     direction: params.direction,
     ethAmount: params.ethAmount,
     btcAmount: params.btcAmount,
@@ -150,32 +204,59 @@ async function createCrossChainSwap(params: any): Promise<CrossChainSwap> {
 }
 
 async function getFusionOrderStatus(orderId: string): Promise<FusionOrder> {
-  // Simulate API call - in production this would call the actual Fusion+ API
-  console.log('Getting Fusion+ order status:', orderId);
+  const contract = getContract();
   
-  return {
-    orderId,
-    makerAsset: 'ETH',
-    takerAsset: 'BTC',
-    makerAmount: '0.01',
-    takerAmount: '0.001',
-    makerAddress: '0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6',
-    takerAddress: 'bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh',
-    hashlock: '0x1234567890abcdef',
-    timelock: Math.floor(Date.now() / 1000) + 3600,
-    secret: 'abcdef1234567890',
-    status: 'open',
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
-  };
+  try {
+    const order = await contract.getFusionOrder(orderId);
+    const isActive = await contract.isOrderActive(orderId);
+    
+    return {
+      orderId: order[0],
+      makerAsset: order[2],
+      takerAsset: order[3],
+      makerAmount: ethers.formatEther(order[4]),
+      takerAmount: ethers.formatEther(order[5]),
+      makerAddress: order[1],
+      takerAddress: '', // Not stored in contract
+      hashlock: order[7],
+      timelock: order[6].toNumber(),
+      secret: '', // Secret not stored on blockchain
+      status: isActive ? 'open' : 'filled',
+      createdAt: order[10].toNumber() * 1000,
+      updatedAt: Date.now(),
+    };
+  } catch (error) {
+    throw new Error(`Failed to get order status: ${(error as Error).message}`);
+  }
 }
 
 async function executeFusionOrder(orderId: string, secret: string): Promise<boolean> {
-  console.log('Executing Fusion+ order:', orderId, 'with secret:', secret);
-  return true;
+  const readContract = getContract();
+  const writeContract = await getContractWithSigner();
+  
+  try {
+    // Get order details to determine amount
+    const order = await readContract.getFusionOrder(orderId);
+    const takerAmount = order[5]; // takerAmount
+    
+    const tx = await writeContract.matchFusionOrder(orderId, secret, { value: takerAmount });
+    await tx.wait();
+    
+    return true;
+  } catch (error) {
+    throw new Error(`Failed to execute order: ${(error as Error).message}`);
+  }
 }
 
 async function cancelFusionOrder(orderId: string): Promise<boolean> {
-  console.log('Cancelling Fusion+ order:', orderId);
-  return true;
+  const writeContract = await getContractWithSigner();
+  
+  try {
+    const tx = await writeContract.cancelFusionOrder(orderId);
+    await tx.wait();
+    
+    return true;
+  } catch (error) {
+    throw new Error(`Failed to cancel order: ${(error as Error).message}`);
+  }
 } 

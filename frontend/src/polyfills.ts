@@ -14,9 +14,9 @@ const moduleCache: Record<string, any> = {};
   if (id === 'events') return { EventEmitter };
   if (id === 'util') return util;
   
-  // For other modules, return a mock or use dynamic import
+  // For other modules, use dynamic import or throw error
   if (!moduleCache[id]) {
-    moduleCache[id] = {};
+    throw new Error(`Module '${id}' not available in browser environment`);
   }
   return moduleCache[id];
 };
