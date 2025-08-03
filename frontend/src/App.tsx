@@ -621,9 +621,10 @@ export default function App() {
         setSecret(storedSecret);
         console.log('Retrieved secret from localStorage for order:', orderId);
       } else {
-        // Generate a new secret for matching this order (if we're the taker)
-        generateSecret();
-        console.log('Generated new secret for matching order:', orderId);
+        // For matching someone else's order, we need to get the secret from the order itself
+        // or use a different approach. For now, we'll clear the secret and show a message.
+        setSecret('');
+        console.log('No secret found for order:', orderId, '- this order cannot be matched without the original secret');
       }
       
       console.log('Order selection complete - fusionOrderId:', orderData.orderId, 'fusionStatus:', `Selected order: ${orderData.status}`);
@@ -638,13 +639,17 @@ export default function App() {
   }
 
   async function matchSelectedOrder() {
-    if (!selectedOrder || !secret || !provider || !signer) {
-      console.log('Cannot match order - missing selectedOrder, secret, provider, or signer:', { 
+    if (!selectedOrder || !provider || !signer) {
+      console.log('Cannot match order - missing selectedOrder, provider, or signer:', { 
         selectedOrder: !!selectedOrder, 
-        secret: !!secret, 
         provider: !!provider, 
         signer: !!signer 
       });
+      return;
+    }
+
+    if (!secret) {
+      setFusionStatus('❌ Cannot match this order: You need the original secret to match this order. Only the order creator can match their own orders.');
       return;
     }
     
@@ -1434,8 +1439,8 @@ export default function App() {
                 <div className="mt-4">
                   <button 
                     onClick={() => matchSelectedOrder()}
-                    className="btn btn-primary mr-2"
-                    disabled={orderMatching}
+                    className={`btn mr-2 ${secret ? 'btn-primary' : 'btn-secondary opacity-50 cursor-not-allowed'}`}
+                    disabled={orderMatching || !secret}
                   >
                     {orderMatching ? (
                       <>
@@ -1445,8 +1450,10 @@ export default function App() {
                         </svg>
                         Matching...
                       </>
-                    ) : (
+                    ) : secret ? (
                       'Match this order'
+                    ) : (
+                      'Cannot match (no secret)'
                     )}
                   </button>
                   <button 
@@ -1460,6 +1467,12 @@ export default function App() {
                     Clear selection
                   </button>
                 </div>
+                {!secret && (
+                  <div className="mt-2 text-sm text-orange-600 bg-orange-50 p-2 rounded">
+                    <strong>Note:</strong> This order cannot be matched because you don't have the original secret. 
+                    Only the order creator can match their own orders. To match orders, you need to create your own order first.
+                  </div>
+                )}
               </div>
             )}
 
